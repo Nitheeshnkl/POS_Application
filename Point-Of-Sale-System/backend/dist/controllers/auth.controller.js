@@ -28,8 +28,8 @@ const setup = async (req, res, next) => {
             return res.status(400).json({ message: 'Setup already completed' });
         }
         const { name, username, password, storeName, storeAddress, storePhone } = req.body;
-        if (!name || !username || !password || !storeName) {
-            return res.status(400).json({ message: 'Name, username, password, and store name are required' });
+        if (!name?.trim() || !username?.trim() || !password || !storeName?.trim()) {
+            return res.status(400).json({ message: 'Name, username, password and store name are required' });
         }
         const hashedPassword = await bcrypt_1.default.hash(password, 10);
         const { rows: userRows } = await client.query('INSERT INTO users (name, username, password, role) VALUES ($1, $2, $3, $4) RETURNING id, name, username, role', [name, username, hashedPassword, 'owner']);

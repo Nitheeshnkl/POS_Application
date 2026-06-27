@@ -26,8 +26,8 @@ export const setup = async (req: Request, res: Response, next: NextFunction) => 
 
     const { name, username, password, storeName, storeAddress, storePhone } = req.body;
 
-    if (!name || !username || !password || !storeName) {
-      return res.status(400).json({ message: 'Name, username, password, and store name are required' });
+    if (!name?.trim() || !username?.trim() || !password || !storeName?.trim()) {
+      return res.status(400).json({ message: 'Name, username, password and store name are required' });
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
