@@ -12,11 +12,13 @@
   "dependencies": {
     "@tanstack/react-query": "^5.17.19",
     "axios": "^1.6.7",
+    "camelcase-keys": "^10.0.2",
     "clsx": "^2.1.0",
     "lucide-react": "^0.321.0",
     "react": "^18.2.0",
     "react-barcode": "^1.4.6",
     "react-dom": "^18.2.0",
+    "react-hot-toast": "^2.6.0",
     "react-router-dom": "^6.22.0",
     "recharts": "^2.11.0",
     "tailwind-merge": "^2.2.1",

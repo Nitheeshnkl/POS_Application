@@ -17,7 +17,7 @@ import { formatDate } from '../../utils/formatDate';
 const Reports: React.FC = () => {
   const [activeTab, setActiveTab] = useState('sales');
   const [filters, setFilters] = useState({
-    start_date: new Date(new Date().setDate(1)).toISOString().split('T')[0], // First day of month
+    start_date: new Date(new Date().setDate(1)).toISOString().split('T')[0],
     end_date: new Date().toISOString().split('T')[0],
     month: new Date().getMonth() + 1,
     year: new Date().getFullYear()
@@ -86,11 +86,11 @@ const Reports: React.FC = () => {
     <div className="p-6">
       <h1 className="text-2xl font-bold mb-6">Reports</h1>
 
-      <div className="flex border-b mb-6">
+      <div className="flex border-b mb-6 overflow-x-auto">
         {tabs.map(tab => (
           <button
             key={tab.id}
-            className={`px-4 py-2 font-medium ${
+            className={`px-4 py-2 font-medium whitespace-nowrap ${
               activeTab === tab.id
                 ? 'border-b-2 border-blue-500 text-blue-600'
                 : 'text-gray-500 hover:text-gray-700'
@@ -130,7 +130,9 @@ const Reports: React.FC = () => {
                   onChange={e => setFilters({ ...filters, month: parseInt(e.target.value) })}
                 >
                   {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
-                    <option key={m} value={m}>{new Date(0, m - 1).toLocaleString('default', { month: 'long' })}</option>
+                    <option key={m} value={m}>
+                      {new Date(0, m - 1).toLocaleString('default', { month: 'long' })}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -146,10 +148,11 @@ const Reports: React.FC = () => {
             <Button
               variant="secondary"
               onClick={() => {
-                const data = activeTab === 'sales' ? salesData :
-                             activeTab === 'stock' ? stockData :
-                             activeTab === 'purchases' ? purchaseData :
-                             activeTab === 'performance' ? performanceData : [];
+                const data =
+                  activeTab === 'sales' ? salesData :
+                  activeTab === 'stock' ? stockData :
+                  activeTab === 'purchases' ? purchaseData :
+                  activeTab === 'performance' ? performanceData : [];
                 exportToCSV(data, `${activeTab}-report`);
               }}
             >
@@ -166,7 +169,7 @@ const Reports: React.FC = () => {
             { header: 'Date', accessor: (v: any) => formatDate(v.createdAt) },
             { header: 'Cashier', accessor: 'cashierName' },
             { header: 'Payment', accessor: 'paymentMode' },
-            { header: 'Amount', accessor: (v: any) => formatCurrency(v.totalAmount) }
+            { header: 'Amount', accessor: (v: any) => formatCurrency(v.grandTotal) }
           ]}
           data={salesData || []}
           isLoading={salesLoading}
@@ -177,16 +180,16 @@ const Reports: React.FC = () => {
       {activeTab === 'stock' && (
         <Table
           columns={[
-            { header: 'Product', accessor: 'name' },
-            { header: 'Category', accessor: 'category' },
-            { header: 'Current Stock', accessor: 'stock' },
-            { header: 'Unit', accessor: 'unit' },
+            { header: 'Product', accessor: 'nameEn' },
+            { header: 'Category', accessor: 'categoryName' },
+            { header: 'Current Stock', accessor: 'currentStock' },
+            { header: 'Unit', accessor: 'unitType' },
             { header: 'Purchase Price', accessor: (v: any) => formatCurrency(v.purchasePrice) },
-            { header: 'Stock Value', accessor: (v: any) => formatCurrency(v.value) }
+            { header: 'Stock Value', accessor: (v: any) => formatCurrency(v.valuation) }
           ]}
           data={stockData || []}
           isLoading={stockLoading}
-          keyExtractor={(v: any) => v.id || v.name}
+          keyExtractor={(v: any) => v.id}
         />
       )}
 
@@ -208,11 +211,28 @@ const Reports: React.FC = () => {
         <div className="bg-white p-6 rounded-lg shadow max-w-md mx-auto">
           <h2 className="text-xl font-bold mb-4 border-b pb-2">Profit & Loss Summary</h2>
           <div className="space-y-3">
-            <div className="flex justify-between"><span>Revenue:</span><span className="font-bold text-green-600">{formatCurrency(plData.revenue)}</span></div>
-            <div className="flex justify-between"><span>COGS:</span><span className="font-bold text-red-600">-{formatCurrency(plData.cogs)}</span></div>
-            <div className="flex justify-between border-t pt-2"><span>Gross Profit:</span><span className="font-bold">{formatCurrency(plData.grossProfit)}</span></div>
-            <div className="flex justify-between text-red-600"><span>Expenses:</span><span>-{formatCurrency(plData.expenses)}</span></div>
-            <div className="flex justify-between border-t-2 pt-2 text-xl"><span>Net Profit:</span><span className={`font-bold ${plData.netProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>{formatCurrency(plData.netProfit)}</span></div>
+            <div className="flex justify-between">
+              <span>Revenue:</span>
+              <span className="font-bold text-green-600">{formatCurrency(plData.revenue)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>COGS:</span>
+              <span className="font-bold text-red-600">-{formatCurrency(plData.cogs)}</span>
+            </div>
+            <div className="flex justify-between border-t pt-2">
+              <span>Gross Profit:</span>
+              <span className="font-bold">{formatCurrency(plData.grossProfit)}</span>
+            </div>
+            <div className="flex justify-between text-red-600">
+              <span>Expenses:</span>
+              <span>-{formatCurrency(plData.expenses)}</span>
+            </div>
+            <div className="flex justify-between border-t-2 pt-2 text-xl">
+              <span>Net Profit:</span>
+              <span className={`font-bold ${plData.netProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                {formatCurrency(plData.netProfit)}
+              </span>
+            </div>
           </div>
         </div>
       )}
@@ -220,15 +240,15 @@ const Reports: React.FC = () => {
       {activeTab === 'gst' && (
         <Table
           columns={[
-            { header: 'GST Rate', accessor: (v: any) => `${v.rate}%` },
+            { header: 'GST Rate', accessor: (v: any) => `${v.gstRate}%` },
             { header: 'Taxable Amount', accessor: (v: any) => formatCurrency(v.taxableAmount) },
-            { header: 'CGST', accessor: (v: any) => formatCurrency(v.cgst) },
-            { header: 'SGST', accessor: (v: any) => formatCurrency(v.sgst) },
+            { header: 'CGST (50%)', accessor: (v: any) => formatCurrency(Number(v.totalGst) / 2) },
+            { header: 'SGST (50%)', accessor: (v: any) => formatCurrency(Number(v.totalGst) / 2) },
             { header: 'Total GST', accessor: (v: any) => formatCurrency(v.totalGst) }
           ]}
           data={gstData || []}
           isLoading={gstLoading}
-          keyExtractor={(v: any) => v.rate}
+          keyExtractor={(v: any) => v.gstRate}
         />
       )}
 

@@ -8,7 +8,7 @@ export const generateBillNumber = async (): Promise<string> => {
   const prefix = settingsRes.rows[0]?.value || 'SMS';
 
   const countRes = await pool.query(
-    `SELECT COUNT(*) as cnt FROM bills WHERE DATE(bill_date) = CURRENT_DATE`
+    `SELECT COUNT(*) as cnt FROM bills WHERE DATE(created_at) = CURRENT_DATE`
   );
   const sequence = parseInt(countRes.rows[0].cnt, 10) + 1;
   const sequenceString = sequence.toString().padStart(4, '0');

@@ -14,6 +14,8 @@ import notificationsRoutes from './routes/notifications.routes.js';
 import settingsRoutes from './routes/settings.routes.js';
 import usersRoutes from './routes/users.routes.js';
 import reportsRoutes from './routes/reports.routes.js';
+import cashoutRoutes from './routes/cashout.routes.js';
+import suppliersRoutes from './routes/suppliers.routes.js';
 import { logger } from './utils/logger.js';
 
 validateEnv();
@@ -28,7 +30,6 @@ app.use(cors({
 app.use(express.json());
 app.use(cookieParser());
 
-// Routes
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/categories', categoriesRoutes);
 app.use('/api/v1/products', productsRoutes);
@@ -40,8 +41,9 @@ app.use('/api/v1/notifications', notificationsRoutes);
 app.use('/api/v1/settings', settingsRoutes);
 app.use('/api/v1/users', usersRoutes);
 app.use('/api/v1/reports', reportsRoutes);
+app.use('/api/v1/cashouts', cashoutRoutes);
+app.use('/api/v1/suppliers', suppliersRoutes);
 
-// Health check
 app.get('/health', (req: Request, res: Response) => {
   res.json({ status: 'ok' });
 });

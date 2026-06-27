@@ -19,6 +19,8 @@ const notifications_routes_js_1 = __importDefault(require("./routes/notification
 const settings_routes_js_1 = __importDefault(require("./routes/settings.routes.js"));
 const users_routes_js_1 = __importDefault(require("./routes/users.routes.js"));
 const reports_routes_js_1 = __importDefault(require("./routes/reports.routes.js"));
+const cashout_routes_js_1 = __importDefault(require("./routes/cashout.routes.js"));
+const suppliers_routes_js_1 = __importDefault(require("./routes/suppliers.routes.js"));
 const logger_js_1 = require("./utils/logger.js");
 (0, env_js_1.validateEnv)();
 const app = (0, express_1.default)();
@@ -28,7 +30,6 @@ app.use((0, cors_1.default)({
 }));
 app.use(express_1.default.json());
 app.use((0, cookie_parser_1.default)());
-// Routes
 app.use('/api/v1/auth', auth_routes_js_1.default);
 app.use('/api/v1/categories', categories_routes_js_1.default);
 app.use('/api/v1/products', products_routes_js_1.default);
@@ -40,7 +41,8 @@ app.use('/api/v1/notifications', notifications_routes_js_1.default);
 app.use('/api/v1/settings', settings_routes_js_1.default);
 app.use('/api/v1/users', users_routes_js_1.default);
 app.use('/api/v1/reports', reports_routes_js_1.default);
-// Health check
+app.use('/api/v1/cashouts', cashout_routes_js_1.default);
+app.use('/api/v1/suppliers', suppliers_routes_js_1.default);
 app.get('/health', (req, res) => {
     res.json({ status: 'ok' });
 });

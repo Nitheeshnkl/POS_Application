@@ -1,4 +1,5 @@
 import axios from 'axios';
+import camelcaseKeys from 'camelcase-keys';
 import { useAuthStore } from '../store/authStore';
 
 const apiClient = axios.create({
@@ -18,7 +19,12 @@ apiClient.interceptors.request.use((config) => {
 });
 
 apiClient.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    if (response.data && typeof response.data === 'object') {
+      response.data = camelcaseKeys(response.data, { deep: true });
+    }
+    return response;
+  },
   async (error) => {
     const originalRequest = error.config;
     if (error.response?.status === 401 && !originalRequest._retry) {

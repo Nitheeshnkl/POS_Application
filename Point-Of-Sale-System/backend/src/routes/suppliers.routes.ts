@@ -1,0 +1,17 @@
+import { Router } from 'express';
+import * as suppliersController from '../controllers/suppliers.controller.js';
+import { authenticate } from '../middleware/auth.js';
+import { roleGuard } from '../middleware/roleGuard.js';
+
+const router = Router();
+
+router.use(authenticate);
+router.use(roleGuard(['owner']));
+
+router.get('/', suppliersController.getSuppliers);
+router.post('/', suppliersController.createSupplier);
+router.get('/:id', suppliersController.getSupplierById);
+router.put('/:id', suppliersController.updateSupplier);
+router.get('/:id/purchases', suppliersController.getSupplierPurchases);
+
+export default router;

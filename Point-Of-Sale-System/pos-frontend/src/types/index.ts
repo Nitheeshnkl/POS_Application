@@ -28,6 +28,7 @@ export interface Product {
   sellingPrice: number;
   currentStock: number;
   minStockAlert: number;
+  gstRate: number;
   isActive: boolean;
   category?: Category;
 }
@@ -40,6 +41,7 @@ export interface BillItem {
   productNameTa: string;
   qty: number;
   unitPrice: number;
+  gstRate: number;
   total: number;
 }
 
@@ -49,12 +51,12 @@ export interface Bill {
   cashierId: string;
   customerName?: string;
   customerPhone?: string;
-  totalAmount: number;
-  discount: number;
-  gstAmount: number;
-  payableAmount: number;
+  subtotal: number;
+  gstTotal: number;
+  discountTotal: number;
+  grandTotal: number;
   paymentMode: 'cash' | 'upi' | 'card' | 'credit';
-  status: 'completed' | 'cancelled';
+  paymentStatus: 'paid' | 'pending' | 'cancelled';
   createdAt: string;
   items?: BillItem[];
   cashier?: User;
@@ -78,6 +80,7 @@ export interface Purchase {
   totalAmount: number;
   paymentMode: string;
   purchaseDate: string;
+  supplierId?: string;
   items?: PurchaseItem[];
 }
 
@@ -121,4 +124,33 @@ export interface Settings {
   lowStockAlert: number;
   receiptFooter: string;
   billPrefix: string;
+}
+
+export interface Supplier {
+  id: string;
+  name: string;
+  phone?: string;
+  email?: string;
+  gstin?: string;
+  address?: string;
+  notes?: string;
+  createdAt: string;
+}
+
+export interface Cashout {
+  id: string;
+  cashierId: string;
+  cashierName: string;
+  cashoutDate: string;
+  expectedCash: number;
+  expectedUpi: number;
+  expectedCard: number;
+  expectedCredit: number;
+  actualCash?: number;
+  cashDifference?: number;
+  denominationBreakdown?: Record<string, number>;
+  notes?: string;
+  status: 'open' | 'closed';
+  closedAt?: string;
+  createdAt: string;
 }
