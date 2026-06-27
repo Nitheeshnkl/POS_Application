@@ -22,10 +22,9 @@ const getAllProducts = async (req, res, next) => {
         params.push(category_id);
         query += ` AND p.category_id = $${params.length}`;
     }
-    if (is_active !== undefined) {
-        params.push(is_active === 'true');
-        query += ` AND p.is_active = $${params.length}`;
-    }
+    const activeFilter = is_active !== undefined ? is_active : 'true';
+    params.push(activeFilter === 'true');
+    query += ` AND p.is_active = $${params.length}`;
     query += ' ORDER BY p.name_en ASC';
     try {
         const result = await db_js_1.default.query(query, params);
@@ -79,7 +78,7 @@ const createProduct = async (req, res, next) => {
         const { category_id, name_en, name_ta, barcode, unit_type, purchase_price, selling_price, initial_stock, min_stock_alert, gst_rate } = req.body;
         const productResult = await client.query(`INSERT INTO products 
        (category_id, name_en, name_ta, barcode, unit_type, purchase_price, selling_price, current_stock, min_stock_alert, gst_rate) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`, [category_id, name_en, name_ta, barcode, unit_type, purchase_price || 0, selling_price || 0, initial_stock || 0, min_stock_alert || 5, gst_rate || 0]);
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`, [category_id || null, name_en, name_ta, barcode, unit_type, purchase_price || 0, selling_price || 0, initial_stock || 0, min_stock_alert || 5, gst_rate || 0]);
         const product = productResult.rows[0];
         if (initial_stock && initial_stock > 0) {
             await client.query(`INSERT INTO stock_movements 
@@ -109,7 +108,7 @@ const updateProduct = async (req, res, next) => {
        SET category_id = $1, name_en = $2, name_ta = $3, barcode = $4, unit_type = $5, 
            purchase_price = $6, selling_price = $7, min_stock_alert = $8, gst_rate = $9, 
            is_active = $10, updated_at = CURRENT_TIMESTAMP
-       WHERE id = $11 RETURNING *`, [category_id, name_en, name_ta, barcode, unit_type, purchase_price, selling_price, min_stock_alert, gst_rate, is_active, id]);
+       WHERE id = $11 RETURNING *`, [category_id || null, name_en, name_ta, barcode, unit_type, purchase_price, selling_price, min_stock_alert, gst_rate, is_active, id]);
         if (result.rowCount === 0) {
             return res.status(404).json({ message: 'Product not found' });
         }

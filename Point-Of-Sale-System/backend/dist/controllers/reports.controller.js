@@ -195,29 +195,23 @@ const getCashierPerformance = async (req, res, next) => {
 exports.getCashierPerformance = getCashierPerformance;
 const getTopProducts = async (req, res, next) => {
     try {
-        const { start_date, end_date, limit = 10 } = req.query;
-        let query = `
-      SELECT 
-        p.name_en as name,
-        SUM(bi.quantity) as total_qty,
-        SUM(bi.line_total) as total_sales
+        const limit = Math.min(parseInt(req.query.limit) || 10, 50);
+        const days = parseInt(req.query.days) || 30;
+        const result = await db_js_1.default.query(`
+      SELECT
+        p.id, p.name_en, p.name_ta, p.current_stock, p.min_stock_alert,
+        SUM(bi.quantity)                 AS total_qty_sold,
+        SUM(bi.quantity * bi.unit_price) AS total_revenue,
+        (p.current_stock <= p.min_stock_alert) AS needs_restock
       FROM bill_items bi
-      JOIN products p ON bi.product_id = p.id
-      JOIN bills b ON bi.bill_id = b.id
-      WHERE b.payment_status != 'cancelled'
-    `;
-        const params = [];
-        if (start_date) {
-            query += ' AND b.created_at >= $' + (params.length + 1);
-            params.push(start_date);
-        }
-        if (end_date) {
-            query += ' AND b.created_at <= $' + (params.length + 1);
-            params.push(end_date);
-        }
-        query += ' GROUP BY p.id, p.name_en ORDER BY total_qty DESC LIMIT $' + (params.length + 1);
-        params.push(limit);
-        const result = await db_js_1.default.query(query, params);
+      JOIN products p ON p.id = bi.product_id
+      JOIN bills b    ON b.id = bi.bill_id
+      WHERE b.created_at >= NOW() - ($2 || ' days')::INTERVAL
+        AND b.payment_status = 'paid'
+      GROUP BY p.id, p.name_en, p.name_ta, p.current_stock, p.min_stock_alert
+      ORDER BY total_qty_sold DESC
+      LIMIT $1
+    `, [limit, days]);
         res.json(result.rows);
     }
     catch (error) {

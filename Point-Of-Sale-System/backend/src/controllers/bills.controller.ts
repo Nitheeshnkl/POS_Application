@@ -51,6 +51,8 @@ export const createBill = async (req: Request, res: Response, next: NextFunction
       items,
       payment_mode,
       discount_total = 0,
+      cash_given = null,
+      change_returned = null,
     } = req.body;
     const cashier_id = req.user?.id;
 
@@ -89,8 +91,8 @@ export const createBill = async (req: Request, res: Response, next: NextFunction
     const grand_total = subtotal + gst_total - Number(discount_total);
 
     const billResult = await client.query(
-      'INSERT INTO bills (bill_number, customer_name, customer_phone, subtotal, gst_total, discount_total, grand_total, payment_mode, cashier_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *',
-      [bill_number, customer_name, customer_phone, subtotal, gst_total, discount_total, grand_total, payment_mode, cashier_id]
+      'INSERT INTO bills (bill_number, customer_name, customer_phone, subtotal, gst_total, discount_total, grand_total, payment_mode, cashier_id, cash_given, change_returned) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *',
+      [bill_number, customer_name, customer_phone, subtotal, gst_total, discount_total, grand_total, payment_mode, cashier_id, cash_given, change_returned]
     );
 
     const bill = billResult.rows[0];

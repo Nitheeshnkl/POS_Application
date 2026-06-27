@@ -102,9 +102,9 @@ const Dashboard: React.FC = () => {
               <BarChart data={topProducts || []} layout="vertical">
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis type="number" />
-                <YAxis dataKey="name" type="category" width={150} />
+                <YAxis dataKey="nameEn" type="category" width={150} />
                 <Tooltip />
-                <Bar dataKey="totalQty" fill="#00C49F" name="Qty Sold" />
+                <Bar dataKey="totalQtySold" fill="#00C49F" name="Qty Sold" />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -142,6 +142,44 @@ const Dashboard: React.FC = () => {
             )}
           </div>
         </div>
+      </div>
+
+      {/* Top Selling Products Table */}
+      <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '8px', overflow: 'hidden', marginTop: '32px' }}>
+        <div style={{ padding: '16px 20px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h2 style={{ margin: 0, fontSize: '16px', fontWeight: 600, color: '#111827' }}>Top Selling Products</h2>
+          <span style={{ fontSize: '12px', color: '#6b7280' }}>Last 30 days</span>
+        </div>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
+          <thead style={{ background: '#f9fafb' }}>
+            <tr>
+              {['#', 'Product', 'Units Sold', 'Revenue', 'Stock'].map(h => (
+                <th key={h} style={{ padding: '10px 16px', textAlign: 'left', fontSize: '12px', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.03em' }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {(topProducts || []).map((p: any, i: number) => (
+              <tr key={p.id} style={{ borderTop: '1px solid #f3f4f6' }}>
+                <td style={{ padding: '12px 16px', color: '#9ca3af', fontSize: '13px' }}>{i + 1}</td>
+                <td style={{ padding: '12px 16px' }}>
+                  <span style={{ fontWeight: 500, color: '#111827' }}>{p.nameEn}</span>
+                  {p.nameTa && <span style={{ fontSize: '12px', color: '#6b7280', marginLeft: '6px' }}>{p.nameTa}</span>}
+                </td>
+                <td style={{ padding: '12px 16px', color: '#111827' }}>{p.totalQtySold}</td>
+                <td style={{ padding: '12px 16px', color: '#111827' }}>₹{Number(p.totalRevenue).toFixed(2)}</td>
+                <td style={{ padding: '12px 16px' }}>
+                  <span style={{ padding: '3px 10px', borderRadius: '12px', fontSize: '12px', fontWeight: 500, background: p.needsRestock ? '#fef2f2' : '#f0fdf4', color: p.needsRestock ? '#b91c1c' : '#166534' }}>
+                    {p.currentStock} {p.needsRestock ? '⚠ Restock' : 'OK'}
+                  </span>
+                </td>
+              </tr>
+            ))}
+            {(topProducts || []).length === 0 && (
+              <tr><td colSpan={5} style={{ padding: '32px', textAlign: 'center', color: '#9ca3af' }}>No sales data yet</td></tr>
+            )}
+          </tbody>
+        </table>
       </div>
     </div>
   );

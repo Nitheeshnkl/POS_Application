@@ -44,7 +44,7 @@ const createBill = async (req, res, next) => {
     const client = await db_js_1.default.connect();
     try {
         await client.query('BEGIN');
-        const { customer_name, customer_phone, items, payment_mode, discount_total = 0, } = req.body;
+        const { customer_name, customer_phone, items, payment_mode, discount_total = 0, cash_given = null, change_returned = null, } = req.body;
         const cashier_id = req.user?.id;
         const bill_number = await (0, billNumber_js_1.generateBillNumber)();
         let subtotal = 0;
@@ -69,7 +69,7 @@ const createBill = async (req, res, next) => {
             item.min_stock_alert = product.min_stock_alert;
         }
         const grand_total = subtotal + gst_total - Number(discount_total);
-        const billResult = await client.query('INSERT INTO bills (bill_number, customer_name, customer_phone, subtotal, gst_total, discount_total, grand_total, payment_mode, cashier_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *', [bill_number, customer_name, customer_phone, subtotal, gst_total, discount_total, grand_total, payment_mode, cashier_id]);
+        const billResult = await client.query('INSERT INTO bills (bill_number, customer_name, customer_phone, subtotal, gst_total, discount_total, grand_total, payment_mode, cashier_id, cash_given, change_returned) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *', [bill_number, customer_name, customer_phone, subtotal, gst_total, discount_total, grand_total, payment_mode, cashier_id, cash_given, change_returned]);
         const bill = billResult.rows[0];
         for (const item of items) {
             await client.query('INSERT INTO bill_items (bill_id, product_id, product_name_en, quantity, unit_price, gst_rate, line_total) VALUES ($1, $2, $3, $4, $5, $6, $7)', [bill.id, item.product_id, item.name_en, item.quantity, item.unit_price, item.gst_rate, item.line_total]);

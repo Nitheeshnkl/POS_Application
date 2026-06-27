@@ -43,63 +43,58 @@ export const getTodaySummary = async (req: Request, res: Response, next: NextFun
 };
 
 export const createCashout = async (req: Request, res: Response, next: NextFunction) => {
-  const client = await pool.connect();
   try {
-    await client.query('BEGIN');
+    const { actual_cash, actual_gpay, actual_card, denomination_breakdown, notes } = req.body;
+    const userId = req.user?.id;
 
-    const existing = await client.query(
-      `SELECT id FROM cashouts WHERE cashout_date = CURRENT_DATE LIMIT 1`
-    );
-    if (existing.rows.length > 0) {
-      await client.query('ROLLBACK');
-      return res.status(409).json({ message: 'Cashout already recorded for today' });
-    }
-
-    const summary = await client.query(`
+    // Always fetch expected totals server-side — never trust client
+    const s = await pool.query(`
       SELECT
         COALESCE(SUM(CASE WHEN payment_mode='cash'   AND payment_status='paid' THEN grand_total ELSE 0 END),0) AS expected_cash,
         COALESCE(SUM(CASE WHEN payment_mode='upi'    AND payment_status='paid' THEN grand_total ELSE 0 END),0) AS expected_upi,
         COALESCE(SUM(CASE WHEN payment_mode='card'   AND payment_status='paid' THEN grand_total ELSE 0 END),0) AS expected_card,
-        COALESCE(SUM(CASE WHEN payment_mode='credit' AND payment_status='paid' THEN grand_total ELSE 0 END),0) AS expected_credit,
-        COUNT(*) FILTER (WHERE payment_status='paid') AS bill_count
+        COALESCE(SUM(CASE WHEN payment_mode='credit' AND payment_status='paid' THEN grand_total ELSE 0 END),0) AS expected_credit
       FROM bills WHERE DATE(created_at) = CURRENT_DATE
-    `);
-    const s = summary.rows[0];
+    `).then(r => r.rows[0]);
 
-    const { actual_cash, denomination_breakdown, notes } = req.body;
-    const userId = req.user?.id;
-
-    const cashoutResult = await client.query(`
+    const cashoutResult = await pool.query(`
       INSERT INTO cashouts
         (cashier_id, cashout_date, expected_cash, expected_upi, expected_card, expected_credit,
-         actual_cash, denomination_breakdown, notes, status, closed_at)
-      VALUES ($1, CURRENT_DATE, $2, $3, $4, $5, $6, $7, $8, 'closed', NOW())
+         actual_cash, actual_gpay, actual_card, denomination_breakdown, notes, status, closed_at)
+      VALUES ($1, CURRENT_DATE, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'closed', NOW())
+      ON CONFLICT (cashout_date) DO UPDATE SET
+        actual_cash    = EXCLUDED.actual_cash,
+        actual_gpay    = EXCLUDED.actual_gpay,
+        actual_card    = EXCLUDED.actual_card,
+        denomination_breakdown = EXCLUDED.denomination_breakdown,
+        notes          = EXCLUDED.notes,
+        closed_at      = NOW(),
+        cashier_id     = EXCLUDED.cashier_id,
+        expected_cash  = EXCLUDED.expected_cash,
+        expected_upi   = EXCLUDED.expected_upi,
+        expected_card  = EXCLUDED.expected_card,
+        expected_credit = EXCLUDED.expected_credit
       RETURNING *
     `, [
       userId,
       s.expected_cash, s.expected_upi, s.expected_card, s.expected_credit,
       actual_cash ?? null,
+      actual_gpay ?? null,
+      actual_card ?? null,
       denomination_breakdown ? JSON.stringify(denomination_breakdown) : null,
       notes ?? null,
     ]);
 
     const cashout = cashoutResult.rows[0];
 
-    await client.query(
+    await pool.query(
       'INSERT INTO audit_logs (user_id, action, table_name, record_id, new_values) VALUES ($1,$2,$3,$4,$5)',
       [userId, 'CASHOUT', 'cashouts', cashout.id, JSON.stringify(cashout)]
     );
 
-    await client.query('COMMIT');
     res.status(201).json(cashout);
   } catch (error: any) {
-    await client.query('ROLLBACK');
-    if (error.code === '23505') {
-      return res.status(409).json({ message: 'Cashout already recorded for today' });
-    }
     next(error);
-  } finally {
-    client.release();
   }
 };
 

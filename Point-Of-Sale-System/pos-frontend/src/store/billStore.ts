@@ -6,6 +6,7 @@ interface BillState {
   customer: { name: string; phone: string; isCredit: boolean } | null;
   addItem: (item: BillItem) => void;
   updateQty: (productId: string, qty: number) => void;
+  updatePrice: (productId: string, price: number) => void;
   removeItem: (productId: string) => void;
   clearBill: () => void;
   setCustomer: (customer: { name: string; phone: string; isCredit: boolean } | null) => void;
@@ -30,8 +31,16 @@ export const useBillStore = create<BillState>((set) => ({
     }),
   updateQty: (productId, qty) =>
     set((state) => ({
+      items: qty <= 0
+        ? state.items.filter((i) => i.productId !== productId)
+        : state.items.map((i) =>
+            i.productId === productId ? { ...i, qty, total: qty * i.unitPrice } : i
+          ),
+    })),
+  updatePrice: (productId, price) =>
+    set((state) => ({
       items: state.items.map((i) =>
-        i.productId === productId ? { ...i, qty, total: qty * i.unitPrice } : i
+        i.productId === productId ? { ...i, unitPrice: price, total: price * i.qty } : i
       ),
     })),
   removeItem: (productId) =>

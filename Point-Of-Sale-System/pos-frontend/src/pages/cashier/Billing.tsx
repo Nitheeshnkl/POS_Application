@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import toast, { Toaster } from 'react-hot-toast';
+import { useQuery } from '@tanstack/react-query';
 import { useBillStore } from '../../store/billStore';
 
-import { searchProducts, createProduct } from '../../api/products';
+import { searchProducts, getProducts, createProduct } from '../../api/products';
 import { createBill } from '../../api/bills';
 import { getCategories } from '../../api/categories';
 import { Product, Category, BillItem } from '../../types';
@@ -14,7 +15,7 @@ import { formatCurrency } from '../../utils/formatCurrency';
 import { printReceipt } from '../../utils/printReceipt';
 
 const Billing: React.FC = () => {
-  const { items, addItem, updateQty, removeItem, clearBill, customer, setCustomer } = useBillStore();
+  const { items, addItem, updateQty, updatePrice, removeItem, clearBill, customer, setCustomer } = useBillStore();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<Product[]>([]);
@@ -24,6 +25,15 @@ const Billing: React.FC = () => {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showQtyModal, setShowQtyModal] = useState<Product | null>(null);
   const [qtyInput, setQtyInput] = useState('1');
+  const [paymentMode, setPaymentMode] = useState<'cash' | 'upi' | 'card' | 'credit' | ''>('');
+  const [cashGiven, setCashGiven] = useState('');
+
+  const { data: allProducts = [] } = useQuery<Product[]>({
+    queryKey: ['products-all'],
+    queryFn: () => getProducts({ is_active: true }),
+  });
+
+  const displayProducts = searchQuery.trim().length >= 2 ? searchResults : allProducts;
 
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -75,19 +85,27 @@ const Billing: React.FC = () => {
   );
   const total = subtotal + gst;
 
-  const handleSaveBill = async (paymentMode: 'cash' | 'upi' | 'card' | 'credit', print: boolean = true) => {
+  const grandTotal = subtotal + gst;
+  const change = Number(cashGiven) - grandTotal;
+  const isShort = cashGiven !== '' && change < 0;
+
+  const handleSaveBill = async (mode: 'cash' | 'upi' | 'card' | 'credit', print: boolean = true) => {
     const toastId = toast.loading('Saving bill...');
     try {
-      const billData = {
+      const billData: any = {
         customer_name: customer?.name,
         customer_phone: customer?.phone,
-        payment_mode: paymentMode,
+        payment_mode: mode,
         items: items.map((item) => ({
           product_id: item.productId,
           quantity: item.qty,
         })),
         discount_total: 0,
       };
+      if (mode === 'cash' && cashGiven !== '') {
+        billData.cash_given = Number(cashGiven);
+        billData.change_returned = Math.max(0, change);
+      }
 
       const savedBill = await createBill(billData);
 
@@ -98,6 +116,8 @@ const Billing: React.FC = () => {
       toast.success(`Bill #${savedBill.billNumber} saved!`, { id: toastId });
       clearBill();
       setShowPaymentModal(false);
+      setPaymentMode('');
+      setCashGiven('');
     } catch (error: any) {
       const msg = error?.response?.data?.message || 'Failed to save bill';
       toast.error(msg, { id: toastId });
@@ -125,7 +145,7 @@ const Billing: React.FC = () => {
             )}
 
             <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2 overflow-y-auto max-h-[60vh]">
-              {searchResults.map((product) => (
+              {displayProducts.map((product) => (
                 <div
                   key={product.id}
                   className="p-3 border rounded-lg cursor-pointer hover:bg-blue-50 transition-colors"
@@ -162,37 +182,57 @@ const Billing: React.FC = () => {
                 <div className="text-center text-gray-400 mt-10">Cart is empty</div>
               ) : (
                 <table className="w-full text-sm">
-                  <thead className="border-b">
+                  <thead style={{ borderBottom: '1px solid #e5e7eb' }}>
                     <tr>
-                      <th className="text-left py-2">Item</th>
-                      <th className="text-right py-2">Qty</th>
-                      <th className="text-right py-2">Total</th>
+                      <th style={{ textAlign: 'left', padding: '6px 10px', fontSize: '12px', color: '#6b7280' }}>Item</th>
+                      <th style={{ textAlign: 'left', padding: '6px 10px', fontSize: '12px', color: '#6b7280' }}>Qty</th>
+                      <th style={{ textAlign: 'left', padding: '6px 10px', fontSize: '12px', color: '#6b7280' }}>Price</th>
+                      <th style={{ textAlign: 'left', padding: '6px 10px', fontSize: '12px', color: '#6b7280' }}>Total</th>
                       <th></th>
                     </tr>
                   </thead>
                   <tbody>
                     {items.map((item) => (
-                      <tr key={item.productId} className="border-b">
-                        <td className="py-2">
-                          <div>{item.productNameEn}</div>
-                          <div className="text-xs text-gray-400">{formatCurrency(item.unitPrice)}</div>
-                          {item.gstRate > 0 && (
-                            <div className="text-xs text-blue-400">GST {item.gstRate}%</div>
-                          )}
+                      <tr key={item.productId} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                        <td style={{ padding: '8px 10px', color: '#111827', fontSize: '14px' }}>
+                          <div style={{ fontWeight: 500 }}>{item.productNameEn}</div>
+                          {item.productNameTa && <div style={{ fontSize: '12px', color: '#6b7280' }}>{item.productNameTa}</div>}
+                          {item.gstRate > 0 && <div style={{ fontSize: '11px', color: '#2563eb' }}>GST {item.gstRate}%</div>}
                         </td>
-                        <td className="text-right py-2">
+                        <td style={{ padding: '8px 10px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <button
+                              onClick={() => updateQty(item.productId, item.qty - 1)}
+                              style={{ width: '26px', height: '26px', border: '1px solid #d1d5db', borderRadius: '4px', background: '#fff', cursor: 'pointer', fontSize: '14px', color: '#374151', lineHeight: 1 }}
+                            >−</button>
+                            <input
+                              type="number" min="1"
+                              value={item.qty}
+                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateQty(item.productId, Math.max(1, Number(e.target.value)))}
+                              style={{ width: '44px', textAlign: 'center', border: '1px solid #d1d5db', borderRadius: '4px', padding: '3px 4px', fontSize: '13px', color: '#111827', background: '#fff' }}
+                            />
+                            <button
+                              onClick={() => updateQty(item.productId, item.qty + 1)}
+                              style={{ width: '26px', height: '26px', border: '1px solid #d1d5db', borderRadius: '4px', background: '#fff', cursor: 'pointer', fontSize: '14px', color: '#374151', lineHeight: 1 }}
+                            >+</button>
+                          </div>
+                        </td>
+                        <td style={{ padding: '8px 10px' }}>
                           <input
                             type="number"
-                            className="w-12 text-right border rounded"
-                            value={item.qty}
-                            onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                              updateQty(item.productId, parseFloat(e.target.value) || 0)
-                            }
+                            value={item.unitPrice}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => updatePrice(item.productId, Number(e.target.value))}
+                            style={{ width: '72px', border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px 6px', fontSize: '13px', color: '#111827', background: '#fff' }}
                           />
                         </td>
-                        <td className="text-right py-2 font-medium">{formatCurrency(item.total)}</td>
-                        <td className="text-right py-2">
-                          <button onClick={() => removeItem(item.productId)} className="text-red-500">×</button>
+                        <td style={{ padding: '8px 10px', color: '#111827', fontWeight: 500, fontSize: '14px' }}>
+                          {formatCurrency(item.total)}
+                        </td>
+                        <td style={{ padding: '8px 10px' }}>
+                          <button
+                            onClick={() => removeItem(item.productId)}
+                            style={{ border: 'none', background: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '16px', padding: '2px 6px' }}
+                          >🗑</button>
                         </td>
                       </tr>
                     ))}
@@ -289,29 +329,92 @@ const Billing: React.FC = () => {
 
         <Modal
           isOpen={showPaymentModal}
-          onClose={() => setShowPaymentModal(false)}
+          onClose={() => { setShowPaymentModal(false); setPaymentMode(''); setCashGiven(''); }}
           title="Finalize Payment"
         >
-          <div className="space-y-6">
-            <div className="text-center">
-              <div className="text-gray-500">Total Amount</div>
-              <div className="text-4xl font-bold text-blue-600">{formatCurrency(total)}</div>
+          <div style={{ padding: '4px 0' }}>
+            <div style={{ textAlign: 'center', marginBottom: '20px' }}>
+              <div style={{ fontSize: '13px', color: '#6b7280' }}>Total Amount</div>
+              <div style={{ fontSize: '36px', fontWeight: 700, color: '#1d4ed8' }}>{formatCurrency(grandTotal)}</div>
               {gst > 0 && (
-                <div className="text-sm text-gray-400">incl. GST {formatCurrency(gst)}</div>
+                <div style={{ fontSize: '12px', color: '#9ca3af' }}>incl. GST {formatCurrency(gst)}</div>
               )}
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <Button variant="outline" onClick={() => handleSaveBill('cash')}>💵 Cash</Button>
-              <Button variant="outline" onClick={() => handleSaveBill('upi')}>📱 UPI</Button>
-              <Button variant="outline" onClick={() => handleSaveBill('card')}>💳 Card</Button>
+            {/* Payment mode selection */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '16px' }}>
+              {(['cash', 'upi', 'card'] as const).map(m => (
+                <button
+                  key={m}
+                  onClick={() => setPaymentMode(m)}
+                  style={{
+                    padding: '12px', border: `2px solid ${paymentMode === m ? '#1a6b3c' : '#d1d5db'}`,
+                    borderRadius: '8px', background: paymentMode === m ? '#f0fdf4' : '#fff',
+                    color: paymentMode === m ? '#1a6b3c' : '#374151',
+                    fontWeight: paymentMode === m ? 600 : 400,
+                    fontSize: '14px', cursor: 'pointer'
+                  }}
+                >
+                  {m === 'cash' ? '💵 Cash' : m === 'upi' ? '📱 UPI / GPay' : '💳 Card'}
+                </button>
+              ))}
               {customer?.isCredit && (
-                <Button variant="outline" onClick={() => handleSaveBill('credit')}>📒 Credit</Button>
+                <button
+                  onClick={() => setPaymentMode('credit')}
+                  style={{
+                    padding: '12px', border: `2px solid ${paymentMode === 'credit' ? '#1a6b3c' : '#d1d5db'}`,
+                    borderRadius: '8px', background: paymentMode === 'credit' ? '#f0fdf4' : '#fff',
+                    color: paymentMode === 'credit' ? '#1a6b3c' : '#374151',
+                    fontWeight: paymentMode === 'credit' ? 600 : 400,
+                    fontSize: '14px', cursor: 'pointer'
+                  }}
+                >📒 Credit</button>
               )}
             </div>
 
-            <div className="flex justify-end gap-2 mt-4">
-              <Button variant="outline" onClick={() => setShowPaymentModal(false)}>Cancel</Button>
+            {/* Cash given section */}
+            {paymentMode === 'cash' && (
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, color: '#374151', marginBottom: '5px' }}>
+                  Cash given by customer (₹)
+                </label>
+                <input
+                  type="number"
+                  value={cashGiven}
+                  onChange={e => setCashGiven(e.target.value)}
+                  placeholder={`Min ₹${grandTotal.toFixed(2)}`}
+                  style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #d1d5db', borderRadius: '6px', padding: '10px 12px', fontSize: '14px', color: '#111827', background: '#fff', outline: 'none' }}
+                />
+                {cashGiven !== '' && (
+                  <div style={{ marginTop: '10px', padding: '10px 14px', borderRadius: '6px', background: isShort ? '#fef2f2' : '#f0fdf4', border: `1px solid ${isShort ? '#fecaca' : '#bbf7d0'}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '13px', color: isShort ? '#b91c1c' : '#166534', fontWeight: 500 }}>
+                      {isShort ? '⚠ Amount short' : '✓ Change to return'}
+                    </span>
+                    <span style={{ fontSize: '20px', fontWeight: 700, color: isShort ? '#b91c1c' : '#166534' }}>
+                      ₹{Math.abs(change).toFixed(2)}
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: '10px', marginTop: '4px' }}>
+              <button
+                onClick={() => { setShowPaymentModal(false); setPaymentMode(''); setCashGiven(''); }}
+                style={{ flex: 1, padding: '11px', border: '1px solid #d1d5db', borderRadius: '6px', background: '#fff', color: '#374151', fontSize: '14px', cursor: 'pointer' }}
+              >Cancel</button>
+              <button
+                onClick={() => paymentMode && handleSaveBill(paymentMode)}
+                disabled={!paymentMode || (paymentMode === 'cash' && cashGiven !== '' && isShort)}
+                style={{
+                  flex: 2, padding: '11px', border: 'none', borderRadius: '6px',
+                  background: !paymentMode || (paymentMode === 'cash' && cashGiven !== '' && isShort) ? '#9ca3af' : '#1a6b3c',
+                  color: '#fff', fontSize: '14px', fontWeight: 500,
+                  cursor: !paymentMode || (paymentMode === 'cash' && cashGiven !== '' && isShort) ? 'not-allowed' : 'pointer'
+                }}
+              >
+                {paymentMode ? `Confirm ${paymentMode === 'cash' ? '💵' : paymentMode === 'upi' ? '📱' : paymentMode === 'card' ? '💳' : '📒'} Payment` : 'Select payment mode'}
+              </button>
             </div>
           </div>
         </Modal>
