@@ -1,0 +1,15 @@
+import { Router } from 'express';
+import * as expensesController from '../controllers/expenses.controller.js';
+import { authenticate } from '../middleware/auth.js';
+import { roleGuard } from '../middleware/roleGuard.js';
+
+const router = Router();
+
+router.use(authenticate);
+router.use(roleGuard(['owner']));
+
+router.get('/', expensesController.getExpenses);
+router.post('/', expensesController.createExpense);
+router.get('/monthly', expensesController.getMonthlyExpenses);
+
+export default router;

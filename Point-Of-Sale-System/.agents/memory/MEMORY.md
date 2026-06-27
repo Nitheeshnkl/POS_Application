@@ -1,0 +1,2 @@
+- [Sri Murugan Store Architecture](sri-murugan-arch.md) — dual-service app: Node.js backend (port 3001) + Vite/React frontend (port 5000), PostgreSQL via Replit helium DB
+- [Sri Murugan Auth Setup](sri-murugan-auth.md) — JWT auth, .env at backend/.env, seed users admin/Admin@123 and cashier1/Cashier@123

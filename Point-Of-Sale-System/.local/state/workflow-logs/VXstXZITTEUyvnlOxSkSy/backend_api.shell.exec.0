@@ -1,0 +1,17 @@
+[INFO] 2026-06-27T11:19:43.183Z: Server running on port 3001 in development mode
+error: null value in column "name_en" of relation "categories" violates not-null constraint
+    at /home/runner/workspace/backend/node_modules/pg-pool/index.js:45:11
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async createCategory (/home/runner/workspace/backend/dist/controllers/categories.controller.js:21:24)
+error: null value in column "name_en" of relation "products" violates not-null constraint
+    at /home/runner/workspace/backend/node_modules/pg/lib/client.js:652:17
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async createProduct (/home/runner/workspace/backend/dist/controllers/products.controller.js:80:31)
+error: null value in column "name_en" of relation "products" violates not-null constraint
+    at /home/runner/workspace/backend/node_modules/pg/lib/client.js:652:17
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async createProduct (/home/runner/workspace/backend/dist/controllers/products.controller.js:80:31)
+error: null value in column "name_en" of relation "products" violates not-null constraint
+    at /home/runner/workspace/backend/node_modules/pg/lib/client.js:652:17
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async createProduct (/home/runner/workspace/backend/dist/controllers/products.controller.js:80:31)

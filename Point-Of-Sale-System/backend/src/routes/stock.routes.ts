@@ -1,0 +1,17 @@
+import { Router } from 'express';
+import * as stockController from '../controllers/stock.controller.js';
+import { authenticate } from '../middleware/auth.js';
+import { roleGuard } from '../middleware/roleGuard.js';
+
+const router = Router();
+
+router.use(authenticate);
+
+router.get('/current', stockController.getCurrentStock);
+router.get('/low-alert', stockController.getLowStockAlerts);
+router.get('/movements', stockController.getStockMovements);
+router.post('/adjust', roleGuard(['owner']), stockController.adjustStock);
+router.post('/mark-damaged', roleGuard(['owner']), stockController.markDamaged);
+router.get('/valuation', stockController.getStockValuation);
+
+export default router;

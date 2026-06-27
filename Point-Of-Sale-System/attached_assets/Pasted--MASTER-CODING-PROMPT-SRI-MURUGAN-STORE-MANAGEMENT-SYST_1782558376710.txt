@@ -1,0 +1,1126 @@
+# 🏪 MASTER CODING PROMPT — SRI MURUGAN STORE MANAGEMENT SYSTEM
+## For Coding AI (Cursor / Windsurf / GitHub Copilot / Replit / Claude Code)
+
+---
+
+## 🎯 PROJECT GOAL
+
+You are building a **fully functional Store Management Web Application** for
+**Sri Murugan Store** — a Tamil Nadu retail/department store.
+
+Clone this base repo first:
+```
+git clone https://github.com/CodeitSoft-Tech/Inventory-Management-System-With-POS.git
+cd Inventory-Management-System-With-POS
+```
+
+Study the existing code structure, then **extend and replace** it with everything
+described below. Do NOT start from scratch — adapt the cloned repo.
+
+---
+
+## 🔧 TECH STACK (DO NOT CHANGE)
+
+| Layer       | Technology                                              |
+|-------------|----------------------------------------------------------|
+| Frontend    | React 18, Vite, TypeScript, Tailwind CSS, React Router v6 |
+| State       | Zustand (global), React Query (server state)             |
+| Backend     | Node.js 20, Express.js, TypeScript                       |
+| Database    | PostgreSQL 16 (via pg / node-postgres)                   |
+| Auth        | JWT (access token 15min + refresh token 7d), bcrypt      |
+| PDF/Print   | jsPDF + autotable (receipts & reports)                   |
+| Charts      | Recharts                                                 |
+| Barcode     | @zxing/library (camera scan), react-barcode (display)    |
+| Container   | Docker + Docker Compose                                  |
+| API format  | REST, JSON, versioned at /api/v1/                        |
+
+---
+
+## 👥 USER ROLES — EXACTLY 2
+
+### ROLE 1: OWNER (Admin)
+Full access to everything. Login with username + password.
+
+### ROLE 2: CASHIER
+Restricted access. Can only:
+- Login
+- Create bills (manual entry + barcode)
+- Search products
+- Add new product during billing (triggers owner notification)
+- View their own sales history
+- View current stock levels (read only)
+
+Cashier CANNOT:
+- View investment/profit reports
+- Delete products
+- Edit prices
+- Restore backups
+- View other cashiers' data
+
+---
+
+## 🗄️ DATABASE SCHEMA — PostgreSQL
+
+Create ALL tables with these exact columns. Use `UUID` as primary keys.
+Run via a `schema.sql` file with `IF NOT EXISTS`.
+
+```sql
+-- USERS
+CREATE TABLE users (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name VARCHAR(100) NOT NULL,
+  username VARCHAR(50) UNIQUE NOT NULL,
+  password_hash VARCHAR(255) NOT NULL,
+  role VARCHAR(10) NOT NULL CHECK (role IN ('owner','cashier')),
+  phone VARCHAR(15),
+  is_active BOOLEAN DEFAULT true,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- CATEGORIES
+CREATE TABLE categories (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name_en VARCHAR(100) NOT NULL,
+  name_ta VARCHAR(100),
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- PRODUCTS
+CREATE TABLE products (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name_en VARCHAR(200) NOT NULL,
+  name_ta VARCHAR(200),
+  category_id UUID REFERENCES categories(id),
+  barcode VARCHAR(100) UNIQUE,
+  unit_type VARCHAR(20) NOT NULL CHECK (unit_type IN ('qty','weight_kg','weight_g','litre','ml','packet','box','dozen')),
+  purchase_price NUMERIC(10,2) NOT NULL DEFAULT 0,
+  selling_price NUMERIC(10,2) NOT NULL DEFAULT 0,
+  current_stock NUMERIC(10,3) NOT NULL DEFAULT 0,
+  min_stock_alert NUMERIC(10,3) DEFAULT 5,
+  hsn_code VARCHAR(20),
+  gst_rate NUMERIC(5,2) DEFAULT 0,
+  is_active BOOLEAN DEFAULT true,
+  created_by UUID REFERENCES users(id),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- STOCK MOVEMENTS (every stock change is logged here)
+CREATE TABLE stock_movements (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  product_id UUID REFERENCES products(id),
+  movement_type VARCHAR(20) NOT NULL CHECK (movement_type IN ('purchase','sale','return','adjustment','damaged','expired','opening')),
+  quantity NUMERIC(10,3) NOT NULL,
+  unit_price NUMERIC(10,2),
+  total_value NUMERIC(12,2),
+  reference_id UUID,          -- bill_id or purchase_id
+  notes TEXT,
+  performed_by UUID REFERENCES users(id),
+  movement_date TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- PURCHASES (Stock coming IN — investment tracking)
+CREATE TABLE purchases (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  supplier_name VARCHAR(200),
+  supplier_phone VARCHAR(15),
+  invoice_number VARCHAR(100),
+  purchase_date DATE NOT NULL DEFAULT CURRENT_DATE,
+  total_amount NUMERIC(12,2) NOT NULL DEFAULT 0,
+  paid_amount NUMERIC(12,2) DEFAULT 0,
+  payment_mode VARCHAR(20) DEFAULT 'cash' CHECK (payment_mode IN ('cash','upi','credit','bank_transfer')),
+  notes TEXT,
+  created_by UUID REFERENCES users(id),
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- PURCHASE ITEMS
+CREATE TABLE purchase_items (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  purchase_id UUID REFERENCES purchases(id) ON DELETE CASCADE,
+  product_id UUID REFERENCES products(id),
+  product_name VARCHAR(200) NOT NULL,
+  quantity NUMERIC(10,3) NOT NULL,
+  unit_price NUMERIC(10,2) NOT NULL,
+  total_price NUMERIC(12,2) NOT NULL
+);
+
+-- BILLS (Sales)
+CREATE TABLE bills (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  bill_number VARCHAR(30) UNIQUE NOT NULL,   -- SMS-YYYYMMDD-0001
+  customer_name VARCHAR(100),
+  customer_phone VARCHAR(15),
+  subtotal NUMERIC(12,2) NOT NULL DEFAULT 0,
+  discount_amount NUMERIC(10,2) DEFAULT 0,
+  gst_amount NUMERIC(10,2) DEFAULT 0,
+  total_amount NUMERIC(12,2) NOT NULL DEFAULT 0,
+  paid_amount NUMERIC(12,2) DEFAULT 0,
+  change_amount NUMERIC(10,2) DEFAULT 0,
+  payment_mode VARCHAR(20) DEFAULT 'cash' CHECK (payment_mode IN ('cash','upi','card','credit')),
+  bill_status VARCHAR(20) DEFAULT 'paid' CHECK (bill_status IN ('paid','credit','cancelled')),
+  cashier_id UUID REFERENCES users(id),
+  bill_date TIMESTAMPTZ DEFAULT NOW(),
+  notes TEXT
+);
+
+-- BILL ITEMS
+CREATE TABLE bill_items (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  bill_id UUID REFERENCES bills(id) ON DELETE CASCADE,
+  product_id UUID REFERENCES products(id),
+  product_name VARCHAR(200) NOT NULL,
+  unit_type VARCHAR(20) NOT NULL,
+  quantity NUMERIC(10,3) NOT NULL,
+  unit_price NUMERIC(10,2) NOT NULL,
+  purchase_price NUMERIC(10,2) NOT NULL,  -- snapshot for profit calc
+  discount NUMERIC(10,2) DEFAULT 0,
+  gst_rate NUMERIC(5,2) DEFAULT 0,
+  gst_amount NUMERIC(10,2) DEFAULT 0,
+  total_price NUMERIC(12,2) NOT NULL
+);
+
+-- EXPENSES
+CREATE TABLE expenses (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  category VARCHAR(100) NOT NULL,  -- rent, electricity, salary, transport, misc
+  description TEXT,
+  amount NUMERIC(10,2) NOT NULL,
+  expense_date DATE NOT NULL DEFAULT CURRENT_DATE,
+  payment_mode VARCHAR(20) DEFAULT 'cash',
+  created_by UUID REFERENCES users(id),
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- AUDIT LOGS
+CREATE TABLE audit_logs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES users(id),
+  action VARCHAR(100) NOT NULL,
+  table_name VARCHAR(50),
+  record_id UUID,
+  old_value JSONB,
+  new_value JSONB,
+  ip_address VARCHAR(50),
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- NOTIFICATIONS
+CREATE TABLE notifications (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  for_role VARCHAR(10) DEFAULT 'owner',
+  type VARCHAR(50),    -- new_product, low_stock, credit_bill
+  message TEXT NOT NULL,
+  reference_id UUID,
+  is_read BOOLEAN DEFAULT false,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- SETTINGS
+CREATE TABLE settings (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  key VARCHAR(100) UNIQUE NOT NULL,
+  value TEXT,
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Seed default settings
+INSERT INTO settings (key, value) VALUES
+  ('store_name', 'Sri Murugan Store'),
+  ('store_address', ''),
+  ('store_phone', ''),
+  ('store_gstin', ''),
+  ('store_state', 'Tamil Nadu'),
+  ('currency', '₹'),
+  ('gst_enabled', 'true'),
+  ('low_stock_alert_enabled', 'true'),
+  ('receipt_footer', 'Thank you! வாருங்கள் மீண்டும்!'),
+  ('bill_prefix', 'SMS')
+ON CONFLICT (key) DO NOTHING;
+```
+
+---
+
+## 📁 PROJECT STRUCTURE
+
+```
+sri-murugan-store/
+├── backend/
+│   ├── src/
+│   │   ├── config/
+│   │   │   ├── db.ts           # PostgreSQL pool
+│   │   │   └── env.ts          # env validation
+│   │   ├── middleware/
+│   │   │   ├── auth.ts         # JWT verify middleware
+│   │   │   ├── roleGuard.ts    # owner/cashier guard
+│   │   │   └── errorHandler.ts
+│   │   ├── routes/
+│   │   │   ├── auth.routes.ts
+│   │   │   ├── products.routes.ts
+│   │   │   ├── categories.routes.ts
+│   │   │   ├── bills.routes.ts
+│   │   │   ├── purchases.routes.ts
+│   │   │   ├── stock.routes.ts
+│   │   │   ├── expenses.routes.ts
+│   │   │   ├── reports.routes.ts
+│   │   │   ├── users.routes.ts
+│   │   │   ├── notifications.routes.ts
+│   │   │   └── settings.routes.ts
+│   │   ├── controllers/        # one file per route
+│   │   ├── services/           # business logic
+│   │   ├── utils/
+│   │   │   ├── billNumber.ts   # SMS-YYYYMMDD-XXXX generator
+│   │   │   └── logger.ts
+│   │   └── index.ts            # Express app entry
+│   ├── schema.sql
+│   ├── seed.sql                # demo data
+│   ├── package.json
+│   └── tsconfig.json
+│
+├── frontend/
+│   ├── src/
+│   │   ├── api/                # axios instances per module
+│   │   ├── components/
+│   │   │   ├── ui/             # Button, Input, Modal, Table, Badge
+│   │   │   ├── layout/
+│   │   │   │   ├── Sidebar.tsx
+│   │   │   │   ├── Header.tsx
+│   │   │   │   └── OwnerLayout.tsx / CashierLayout.tsx
+│   │   │   ├── billing/
+│   │   │   │   ├── ProductSearchBar.tsx
+│   │   │   │   ├── BillCart.tsx
+│   │   │   │   ├── ManualProductEntry.tsx
+│   │   │   │   ├── BarcodeScanner.tsx
+│   │   │   │   ├── CustomerForm.tsx
+│   │   │   │   ├── PaymentModal.tsx
+│   │   │   │   └── ReceiptPrint.tsx
+│   │   │   ├── products/
+│   │   │   ├── stock/
+│   │   │   ├── purchases/
+│   │   │   └── reports/
+│   │   ├── pages/
+│   │   │   ├── auth/           Login.tsx
+│   │   │   ├── owner/
+│   │   │   │   ├── Dashboard.tsx
+│   │   │   │   ├── Products.tsx
+│   │   │   │   ├── Categories.tsx
+│   │   │   │   ├── Purchases.tsx
+│   │   │   │   ├── StockMovements.tsx
+│   │   │   │   ├── Expenses.tsx
+│   │   │   │   ├── Reports.tsx
+│   │   │   │   ├── Cashiers.tsx
+│   │   │   │   ├── AuditLogs.tsx
+│   │   │   │   └── Settings.tsx
+│   │   │   └── cashier/
+│   │   │       ├── Billing.tsx
+│   │   │       ├── MyBills.tsx
+│   │   │       └── StockView.tsx
+│   │   ├── store/              # Zustand stores
+│   │   │   ├── authStore.ts
+│   │   │   └── billStore.ts
+│   │   ├── hooks/
+│   │   ├── utils/
+│   │   │   ├── formatCurrency.ts   # ₹ Indian format
+│   │   │   ├── formatDate.ts       # DD/MM/YYYY Indian
+│   │   │   └── printReceipt.ts
+│   │   ├── types/
+│   │   └── App.tsx
+│   ├── index.html
+│   ├── vite.config.ts
+│   └── package.json
+│
+├── docker-compose.yml
+└── README.md
+```
+
+---
+
+## 🔐 AUTHENTICATION — FULL IMPLEMENTATION
+
+### POST /api/v1/auth/login
+```json
+Request:  { "username": "owner", "password": "password123" }
+Response: {
+  "user": { "id", "name", "username", "role" },
+  "accessToken": "...",   // expires 15min
+  "refreshToken": "..."   // expires 7 days, store in httpOnly cookie
+}
+```
+
+### POST /api/v1/auth/refresh
+- Read refreshToken from httpOnly cookie
+- Return new accessToken
+
+### POST /api/v1/auth/logout
+- Clear cookie
+
+### Frontend auth flow:
+- Store accessToken in Zustand (memory only, not localStorage)
+- On 401, auto-call refresh endpoint, retry original request
+- Redirect to /login if refresh fails
+
+### First-launch setup:
+- If zero users in DB → show "Create Owner Account" screen before login
+- Fields: Store Name, Owner Name, Username, Password, Store Phone, GSTIN (optional)
+
+---
+
+## 🧾 BILLING MODULE — CORE FEATURE (BUILD THIS PERFECTLY)
+
+### Page: `/cashier/billing` and `/owner/billing`
+
+#### Layout (mobile-first, one-hand usable):
+```
+┌─────────────────────────────────────────┐
+│  🔍 SEARCH BAR (autofocus always)       │
+│  Type product name OR scan barcode      │
+├────────────────┬────────────────────────┤
+│                │  🛒 CART               │
+│  PRODUCT       │  ─────────────────     │
+│  SEARCH        │  Rice 5kg   x2  ₹120  │
+│  RESULTS       │  Oil 1L     x1  ₹95   │
+│                │  ─────────────────     │
+│  [Category     │  Subtotal:    ₹215     │
+│   Filter]      │  GST (5%):    ₹10.75  │
+│                │  TOTAL:       ₹225.75  │
+└────────────────┴────────────────────────┤
+│ [CUSTOMER] [CLEAR] [PAY NOW →]          │
+└─────────────────────────────────────────┘
+```
+
+#### Product Search behavior:
+1. Type minimum 2 chars → search by name_en OR name_ta
+2. Show results with: name, unit_type, selling_price, current_stock
+3. Click product → open quantity entry popup
+4. Quantity popup: shows unit_type, enter qty, click ADD
+5. Product added to cart instantly
+
+#### Manual Product Entry (CRITICAL FEATURE):
+When search returns 0 results, show button:
+**"+ Add New Product Manually"**
+
+Opens a modal with fields:
+- Product Name (English) — required
+- Product Name (Tamil) — optional
+- Category — dropdown, required
+- Unit Type — dropdown: qty / weight(kg) / weight(g) / litre / ml / packet / box
+- Quantity — required
+- Purchase Price (Cost) — required
+- Selling Price — required
+- Stock to add — required
+
+On Save:
+1. Create product in DB immediately
+2. Add stock_movement (type: opening)
+3. Add to current bill automatically
+4. Send notification to owner: "Cashier [name] added new product: [name]"
+5. Log in audit_logs
+
+#### Cart behavior:
+- Each item shows: Name, Unit, Qty (editable inline), Price, Line Total, [Delete]
+- Qty can be decimal for weight/litre (e.g. 1.5 kg)
+- Changing qty recalculates line total instantly
+- Remove item with × button
+- Cart persists if user navigates away (Zustand)
+
+#### Customer Details (optional):
+Click "Customer" button → small form:
+- Name (text)
+- Phone (10-digit, optional)
+- Credit bill toggle (for credit customers)
+
+#### Payment Modal:
+```
+BILL TOTAL: ₹225.75
+─────────────────────
+Payment Mode: [Cash] [UPI] [Card] [Credit]
+
+Cash Received: [___₹___]
+Change:         ₹ 24.25
+
+Discount: [___₹___] (owner only, or if configured)
+
+[PRINT & SAVE] [SAVE ONLY] [CANCEL]
+```
+
+#### Bill Number format: `SMS-20240615-0001`
+- `SMS` = store prefix (from settings)
+- Date: YYYYMMDD
+- 4-digit sequence reset daily
+
+#### After bill saved:
+1. Deduct stock from each product's `current_stock`
+2. Insert `stock_movements` records (type: sale)
+3. Generate printable receipt (jsPDF)
+4. Show success with bill number
+5. Auto-clear cart
+
+---
+
+## 🖨️ RECEIPT / BILL PRINT
+
+Tamil Nadu GST-compliant receipt format:
+
+```
+════════════════════════════════
+       SRI MURUGAN STORE
+   123 Main St, Coimbatore - 641001
+   Ph: 9876543210
+   GSTIN: 33XXXXX1234X1ZX
+════════════════════════════════
+Bill No : SMS-20240615-0001
+Date    : 15/06/2024  Time: 14:30
+Cashier : Ravi
+────────────────────────────────
+Customer: Murugan (9876500001)
+────────────────────────────────
+#  Item         Qty   Rate  Total
+1  Rice 5kg     2kg   ₹60   ₹120
+2  Sunflower Oil 1L  ₹95   ₹95
+────────────────────────────────
+             Subtotal : ₹215.00
+             GST(5%)  :  ₹10.75
+             Discount :   ₹0.00
+             TOTAL    : ₹225.75
+             Paid     : ₹250.00
+             Change   :  ₹24.25
+════════════════════════════════
+Mode: Cash
+Thank you! வாருங்கள் மீண்டும்!
+   Powered by Sri Murugan Store
+════════════════════════════════
+```
+
+- Print using `window.print()` with a print-only CSS class
+- Also generate PDF via jsPDF for download
+- Receipt must work on 80mm thermal printer width (58 chars max per line)
+
+---
+
+## 📦 STOCK MANAGEMENT MODULE
+
+### Stock Tracking — Every movement logged:
+
+| Movement Type | Trigger                     |
+|---------------|-----------------------------|
+| `purchase`    | When purchase entry saved   |
+| `sale`        | When bill is created        |
+| `return`      | Manual stock return entry   |
+| `adjustment`  | Manual correction by owner  |
+| `damaged`     | Mark items as damaged       |
+| `expired`     | Mark expired stock          |
+| `opening`     | When new product added      |
+
+### API Endpoints:
+```
+GET  /api/v1/stock/current          - all products with current stock
+GET  /api/v1/stock/low-alert        - products below min_stock_alert
+GET  /api/v1/stock/movements        - paginated, filterable by product/date
+POST /api/v1/stock/adjust           - owner only
+POST /api/v1/stock/mark-damaged     - owner only
+GET  /api/v1/stock/valuation        - total inventory value (stock × purchase_price)
+```
+
+### Stock Dashboard widget (Owner):
+```
+📦 Total Products: 245
+⚠️  Low Stock: 12 items
+💰 Inventory Value: ₹1,24,500
+🔄 Today's Stock Out: 45 units
+```
+
+---
+
+## 🛒 PURCHASES MODULE (Stock Coming IN)
+
+### Purpose: Track investment — how much money spent on buying stock
+
+### Form fields:
+- Supplier Name
+- Supplier Phone
+- Invoice/Bill Number (supplier's bill no.)
+- Purchase Date (default today)
+- Payment Mode: Cash / UPI / Credit / Bank Transfer
+- Items table:
+  - Search & select product OR type new product name
+  - Quantity
+  - Unit Price (purchase cost)
+  - Total (auto)
+- Grand Total (auto)
+- Notes
+
+### On saving purchase:
+1. Update `products.current_stock` += quantity for each item
+2. Update `products.purchase_price` = latest unit price
+3. Insert `stock_movements` (type: purchase)
+4. Insert `purchase_items` records
+
+### API:
+```
+GET  /api/v1/purchases              - list, filter by date/supplier
+POST /api/v1/purchases              - create
+GET  /api/v1/purchases/:id          - single with items
+GET  /api/v1/purchases/summary      - monthly totals
+```
+
+---
+
+## 💸 EXPENSES MODULE
+
+Track store running costs separately from stock purchases.
+
+### Expense Categories (Tamil Nadu standard):
+- Rent (வாடகை)
+- Electricity (மின்சாரம்)
+- Staff Salary (ஊதியம்)
+- Transport / Delivery (போக்குவரத்து)
+- Packaging (பேக்கேஜிங்)
+- Miscellaneous (பிற செலவுகள்)
+
+### API:
+```
+GET  /api/v1/expenses               - list, filter by date/category
+POST /api/v1/expenses               - create
+GET  /api/v1/expenses/monthly       - monthly totals by category
+```
+
+---
+
+## 📊 REPORTS & DASHBOARD MODULE (Owner Only)
+
+### Dashboard cards (live data):
+```
+TODAY
+├── Sales Total      : ₹8,450
+├── Bills Count      : 23
+├── Items Sold       : 87
+├── Cash Collected   : ₹6,200
+├── UPI Collected    : ₹2,250
+└── Profit Today     : ₹1,340
+
+THIS MONTH
+├── Total Sales      : ₹1,24,500
+├── Total Purchase   : ₹89,200
+├── Total Expenses   : ₹12,000
+├── Gross Profit     : ₹35,300
+└── Net Profit       : ₹23,300
+```
+
+### Charts (Recharts):
+1. **Daily Sales Bar Chart** — last 30 days
+2. **Monthly Sales Line Chart** — last 12 months
+3. **Top 10 Products** — bar chart (by qty sold)
+4. **Payment Mode Pie** — Cash vs UPI vs Card vs Credit
+5. **Category Sales Pie**
+
+### Report Pages (all with date range filter + export):
+
+**1. Sales Report:**
+- Filter: Date range, Cashier, Payment mode
+- Table: Bill no, Date, Customer, Items count, Total, Cashier
+- Totals row at bottom
+- Export: CSV, PDF
+
+**2. Stock Report:**
+- Current stock of all products
+- Low stock highlight (red)
+- Stock value per product
+- Export: CSV, Excel
+
+**3. Purchase Report:**
+- Filter: Date range, Supplier
+- Total investment per month
+- Export: CSV, PDF
+
+**4. Profit & Loss Report:**
+```
+Period: June 2024
+─────────────────────────────
+INCOME
+  Sales Revenue          ₹1,24,500
+─────────────────────────────
+COST OF GOODS SOLD
+  Opening Stock Value    ₹45,000
+  Purchases              ₹89,200
+  Less: Closing Stock   -₹52,000
+  COGS                   ₹82,200
+─────────────────────────────
+GROSS PROFIT              ₹42,300
+─────────────────────────────
+EXPENSES
+  Rent                    ₹8,000
+  Electricity             ₹2,500
+  Others                  ₹1,500
+  Total Expenses         ₹12,000
+─────────────────────────────
+NET PROFIT                ₹30,300
+═════════════════════════════
+```
+
+**5. GST Report:**
+- CGST + SGST breakup (Tamil Nadu = CGST 50% + SGST 50%)
+- By GST slab: 0%, 5%, 12%, 18%, 28%
+- Monthly total for GST filing
+
+**6. Cashier Performance:**
+- Bills per cashier
+- Sales amount per cashier
+- Average bill value
+- Top products sold by cashier
+
+---
+
+## 🔔 NOTIFICATIONS SYSTEM
+
+### Owner receives notifications for:
+- Low stock alert (when product hits min_stock_alert)
+- New product added by cashier
+- Credit bill created (money pending)
+- Daily summary at end of day (optional)
+
+### Cashier receives:
+- Bill saved confirmation
+
+### Implementation:
+- Polling every 30 seconds: `GET /api/v1/notifications/unread`
+- Bell icon in header with count badge
+- Click → mark as read
+
+---
+
+## 🌐 TAMIL LANGUAGE SUPPORT
+
+### UI Language Toggle: EN | தமிழ்
+
+Implement i18n with `react-i18next`. All UI labels must have both:
+
+```typescript
+// translations/en.ts
+export default {
+  billing: {
+    searchPlaceholder: "Search product by name...",
+    addManual: "Add Manually",
+    cart: "Cart",
+    total: "Total",
+    pay: "Pay Now",
+    customer: "Customer"
+  }
+  // ... complete
+}
+
+// translations/ta.ts
+export default {
+  billing: {
+    searchPlaceholder: "பொருளை பெயரால் தேடுங்கள்...",
+    addManual: "கையேடாக சேர்க்க",
+    cart: "கூடை",
+    total: "மொத்தம்",
+    pay: "இப்போது செலுத்து",
+    customer: "வாடிக்கையாளர்"
+  }
+}
+```
+
+### Tamil numerals in receipts (optional toggle in settings)
+
+### Key Tamil translations to include:
+| English | Tamil |
+|---|---|
+| Product | பொருள் |
+| Stock | இருப்பு |
+| Bill | கணக்கு |
+| Total | மொத்தம் |
+| Purchase | கொள்முதல் |
+| Sale | விற்பனை |
+| Profit | லாபம் |
+| Expense | செலவு |
+| Category | வகை |
+| Quantity | அளவு |
+| Price | விலை |
+| Payment | செலுத்தல் |
+| Cash | பணம் |
+| Customer | வாடிக்கையாளர் |
+| Receipt | ரசீது |
+| Weight | எடை |
+| Dashboard | கட்டுப்பாட்டுப் பலகை |
+
+---
+
+## 🇮🇳 INDIAN / TAMIL NADU STANDARDS — MANDATORY
+
+### Currency:
+- Always display as ₹ (Indian Rupee)
+- Format: `₹1,24,500.50` (Indian numbering — lakhs, not thousands)
+- Use `toLocaleString('en-IN')` for all currency display
+
+### GST (Tamil Nadu state):
+- CGST = half of GST rate (Central)
+- SGST = half of GST rate (State — Tamil Nadu)
+- Standard GST slabs: 0%, 5%, 12%, 18%, 28%
+- GSTIN format validation: `33XXXXX1234X1ZX` (33 = Tamil Nadu state code)
+- HSN code field for each product
+
+### Date & Time:
+- Display: `DD/MM/YYYY` (Indian format)
+- Time: 12-hour format with AM/PM
+- All dates stored as UTC in DB, displayed in IST (UTC+5:30)
+- Set timezone: `Asia/Kolkata`
+
+### Units used in Tamil Nadu stores:
+- kg (kilogram) — கிலோ
+- g (gram) — கிராம்
+- L (litre) — லிட்டர்
+- ml (millilitre)
+- pcs / nos (pieces / numbers) — எண்ணிக்கை
+- packet — பாக்கெட்
+- dozen — டஜன்
+- box — பெட்டி
+
+### Payment modes commonly used in TN:
+- Cash (ரொக்கம்)
+- GPay / PhonePe / Paytm → grouped as "UPI"
+- Card (கார்டு)
+- Credit / Udhaar (கடன்)
+
+### Common store categories (seed these):
+- Groceries (மளிகை)
+- Dairy & Eggs (பால் பொருட்கள்)
+- Fruits & Vegetables (காய்கறி பழங்கள்)
+- Beverages (பானங்கள்)
+- Snacks (சிற்றுண்டி)
+- Personal Care (அழகுப் பொருட்கள்)
+- Cleaning (சுத்தம்)
+- Stationary (எழுதுபொருட்கள்)
+- Grains & Pulses (தானியங்கள்)
+- Oils & Ghee (எண்ணெய்)
+- Spices (மசாலா)
+- Frozen & Meat (ஃப்ரோசன்)
+
+### Common products to seed as demo data:
+- Rice (அரிசி) — per kg
+- Toor Dal (துவரம் பருப்பு) — per kg
+- Coconut Oil 1L (தேங்காய் எண்ணெய்)
+- Sunflower Oil 1L (சூரியகாந்தி எண்ணெய்)
+- Milk 500ml (பால்)
+- Sugar 1kg (சர்க்கரை)
+- Salt 1kg (உப்பு)
+- Tea 250g (தேயிலை)
+- Biscuit packet (பிஸ்கட்)
+- Soap (சோப்பு)
+
+---
+
+## 📱 RESPONSIVE DESIGN REQUIREMENTS
+
+### Mobile (≤767px) — Cashier billing optimized:
+- Single column layout
+- Search bar always sticky at top
+- Large touch targets (min 44px height)
+- Cart slides up from bottom as sheet
+- Number pad for quantity entry
+
+### Tablet (768–1199px):
+- Split view: search left, cart right
+
+### Desktop (≥1200px):
+- Full layout with sidebar
+- Dashboard with grid charts
+
+### Sidebar navigation:
+**Owner sidebar:**
+- Dashboard
+- Billing
+- Products
+- Categories
+- Purchases
+- Stock Movements
+- Expenses
+- Reports
+- Cashiers
+- Audit Logs
+- Settings
+
+**Cashier sidebar:**
+- Billing (main page)
+- My Bills
+- Stock View
+
+---
+
+## 🔌 ALL API ENDPOINTS
+
+### Auth
+```
+POST /api/v1/auth/login
+POST /api/v1/auth/refresh
+POST /api/v1/auth/logout
+POST /api/v1/auth/setup          # first-time owner creation
+GET  /api/v1/auth/me
+```
+
+### Products
+```
+GET    /api/v1/products                    # list, search by q=, category=
+POST   /api/v1/products                    # create (owner + cashier via billing)
+GET    /api/v1/products/:id
+PUT    /api/v1/products/:id                # owner only
+DELETE /api/v1/products/:id                # owner only (soft delete)
+GET    /api/v1/products/barcode/:barcode   # fetch by barcode
+GET    /api/v1/products/low-stock
+```
+
+### Categories
+```
+GET    /api/v1/categories
+POST   /api/v1/categories                  # owner only
+PUT    /api/v1/categories/:id              # owner only
+```
+
+### Bills
+```
+GET    /api/v1/bills                       # owner=all, cashier=own only
+POST   /api/v1/bills                       # create bill
+GET    /api/v1/bills/:id
+PUT    /api/v1/bills/:id/cancel            # owner only
+GET    /api/v1/bills/today/summary
+GET    /api/v1/bills/next-bill-number      # get next bill number
+```
+
+### Purchases
+```
+GET    /api/v1/purchases
+POST   /api/v1/purchases                   # owner only
+GET    /api/v1/purchases/:id
+GET    /api/v1/purchases/monthly-summary
+```
+
+### Stock
+```
+GET    /api/v1/stock/current
+GET    /api/v1/stock/movements             # filter by product, date, type
+POST   /api/v1/stock/adjust                # owner only
+POST   /api/v1/stock/mark-damaged          # owner only
+GET    /api/v1/stock/valuation
+GET    /api/v1/stock/low-alert
+```
+
+### Expenses
+```
+GET    /api/v1/expenses
+POST   /api/v1/expenses                    # owner only
+GET    /api/v1/expenses/monthly
+```
+
+### Reports (owner only)
+```
+GET    /api/v1/reports/dashboard           # all dashboard metrics
+GET    /api/v1/reports/sales               # ?from=&to=&cashier_id=
+GET    /api/v1/reports/profit-loss         # ?from=&to=
+GET    /api/v1/reports/gst                 # ?month=&year=
+GET    /api/v1/reports/cashier-performance # ?from=&to=
+GET    /api/v1/reports/top-products        # ?from=&to=&limit=10
+```
+
+### Users (owner only)
+```
+GET    /api/v1/users                       # list cashiers
+POST   /api/v1/users                       # create cashier
+PUT    /api/v1/users/:id
+PUT    /api/v1/users/:id/toggle-active
+PUT    /api/v1/users/:id/reset-password
+```
+
+### Notifications
+```
+GET    /api/v1/notifications/unread
+PUT    /api/v1/notifications/:id/read
+PUT    /api/v1/notifications/read-all
+```
+
+### Settings (owner only)
+```
+GET    /api/v1/settings
+PUT    /api/v1/settings                    # bulk update
+```
+
+---
+
+## 🐳 DOCKER COMPOSE
+
+```yaml
+version: '3.8'
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: srimurugan_store
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: password123
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./backend/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+      - ./backend/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql
+
+  backend:
+    build: ./backend
+    ports:
+      - "5000:5000"
+    environment:
+      DATABASE_URL: postgresql://admin:password123@db:5432/srimurugan_store
+      JWT_SECRET: your-super-secret-key-change-this
+      JWT_REFRESH_SECRET: your-refresh-secret-key
+      PORT: 5000
+      NODE_ENV: production
+    depends_on:
+      - db
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:3000"
+    environment:
+      VITE_API_URL: http://localhost:5000/api/v1
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:
+```
+
+---
+
+## ✅ IMPLEMENTATION ORDER (Follow this exactly)
+
+### Phase 1 — Foundation
+1. Setup Docker Compose + PostgreSQL
+2. Run schema.sql + seed.sql
+3. Backend: Express + TypeScript + DB connection
+4. Auth endpoints: login, refresh, logout, setup, me
+5. JWT middleware + role guard
+6. Frontend: Vite + React + Zustand auth store
+7. Login page + first-setup page
+8. Route protection + role-based redirects
+
+### Phase 2 — Products & Categories
+1. Categories CRUD (backend + frontend)
+2. Products CRUD (backend + frontend)
+3. Product list page with search/filter
+4. Barcode field support
+
+### Phase 3 — BILLING (Most Important)
+1. Bill number generator
+2. Product search API (fast, ≤300ms)
+3. Billing page layout (split view)
+4. Product search + results
+5. Cart state (Zustand)
+6. Manual product entry modal
+7. Customer details form
+8. Payment modal
+9. Bill save API (with stock deduction + audit)
+10. Receipt print (jsPDF)
+
+### Phase 4 — Stock & Purchases
+1. Stock movements log page
+2. Purchase entry form
+3. Purchase list page
+4. Stock adjustment (owner)
+5. Low stock alert badge
+
+### Phase 5 — Reports & Dashboard
+1. Dashboard metrics API
+2. Dashboard UI (cards + charts)
+3. Sales report with date filter
+4. Profit & Loss report
+5. Stock valuation report
+6. GST report
+7. Cashier performance report
+8. Export CSV/PDF
+
+### Phase 6 — Final Polish
+1. Tamil i18n (all labels)
+2. Notifications system
+3. Settings page (store name, GSTIN, etc.)
+4. Expenses module
+5. Audit logs page
+6. Cashier management
+7. Mobile responsive fixes
+8. Barcode scanner (camera) via @zxing/library
+
+---
+
+## ⚠️ CRITICAL RULES FOR THE CODING AI
+
+1. **Build every feature listed. Do not skip anything.**
+
+2. **Billing must work without barcode** — manual search is primary.
+
+3. **All monetary calculations must use server-side precision** (NUMERIC in DB, not float in JS).
+
+4. **Stock is always deducted at bill save time**, never at cart time.
+
+5. **bill_items must snapshot purchase_price at time of billing** so profit can be calculated correctly even if prices change later.
+
+6. **All amounts in Indian Rupees (₹)** — use `en-IN` locale for formatting.
+
+7. **Dates stored as UTC, displayed as IST (Asia/Kolkata, UTC+5:30)**.
+
+8. **GST split: CGST + SGST** (Tamil Nadu intra-state). No IGST for this store.
+
+9. **Every stock change must write to stock_movements table** — this is the audit trail.
+
+10. **Cashier can add new product during billing** — this is a non-negotiable feature.
+
+11. **Receipt must print correctly on 80mm thermal printer.**
+
+12. **Zero TypeScript `any` types** — define proper types in `/types/`.
+
+13. **Error handling everywhere** — all API errors return `{ success: false, message: string }`.
+
+14. **All sensitive routes must check JWT + role** before executing.
+
+15. **The app must be fully runnable with `docker compose up`.**
+
+---
+
+## 🔑 DEFAULT CREDENTIALS (seed.sql)
+
+```sql
+-- Owner account (password: Admin@123)
+INSERT INTO users (name, username, password_hash, role, phone) VALUES
+('Store Owner', 'admin', '$2b$10$...bcrypt_hash_of_Admin@123...', 'owner', '9876543210');
+
+-- Demo cashier (password: Cashier@123)
+INSERT INTO users (name, username, password_hash, role, phone) VALUES
+('Ravi Kumar', 'cashier1', '$2b$10$...bcrypt_hash_of_Cashier@123...', 'cashier', '9876543211');
+```
+
+> Generate real bcrypt hashes in a setup script, not hardcoded.
+
+---
+
+## 📝 README MUST INCLUDE
+
+```markdown
+# Sri Murugan Store Management System
+
+## Quick Start
+```bash
+git clone <this-repo>
+cd sri-murugan-store
+docker compose up -d
+# App: http://localhost:3000
+# API: http://localhost:5000
+```
+
+## Login
+- Owner: admin / Admin@123
+- Cashier: cashier1 / Cashier@123
+```
+
+---
+
+*End of Prompt — Build the complete application as specified above.*
+*This system is for a Tamil Nadu retail store. Every feature matters.*

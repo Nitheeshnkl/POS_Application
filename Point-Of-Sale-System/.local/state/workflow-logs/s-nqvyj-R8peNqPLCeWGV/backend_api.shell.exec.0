@@ -1,0 +1,79 @@
+[[1;34mINFO[m] Scanning for projects...
+[[1;34mINFO[m] 
+[[1;34mINFO[m] [1m----------------------------< [0;36mlk.ijse:pos[0;1m >-----------------------------[m
+[[1;34mINFO[m] [1mBuilding pos 0.0.1-SNAPSHOT[m
+[[1;34mINFO[m] [1m--------------------------------[ jar ]---------------------------------[m
+[[1;34mINFO[m] 
+[[1;34mINFO[m] [1m>>> [0;32mspring-boot-maven-plugin:3.2.1:run[m [1m(default-cli)[0;1m > [0;1mtest-compile[m @ [36mpos[0;1m >>>[m
+[[1;34mINFO[m] 
+[[1;34mINFO[m] [1m--- [0;32mmaven-resources-plugin:3.3.1:resources[m [1m(default-resources)[m @ [36mpos[0;1m ---[m
+[[1;34mINFO[m] Copying 1 resource from src/main/resources to target/classes
+[[1;34mINFO[m] Copying 0 resource from src/main/resources to target/classes
+[[1;34mINFO[m] 
+[[1;34mINFO[m] [1m--- [0;32mmaven-compiler-plugin:3.11.0:compile[m [1m(default-compile)[m @ [36mpos[0;1m ---[m
+[[1;34mINFO[m] Nothing to compile - all classes are up to date
+[[1;34mINFO[m] 
+[[1;34mINFO[m] [1m--- [0;32mmaven-resources-plugin:3.3.1:testResources[m [1m(default-testResources)[m @ [36mpos[0;1m ---[m
+[[1;34mINFO[m] skip non existing resourceDirectory /home/runner/workspace/pos-backend/src/test/resources
+[[1;34mINFO[m] 
+[[1;34mINFO[m] [1m--- [0;32mmaven-compiler-plugin:3.11.0:testCompile[m [1m(default-testCompile)[m @ [36mpos[0;1m ---[m
+[[1;34mINFO[m] Nothing to compile - all classes are up to date
+[[1;34mINFO[m] 
+[[1;34mINFO[m] [1m<<< [0;32mspring-boot-maven-plugin:3.2.1:run[m [1m(default-cli)[0;1m < [0;1mtest-compile[m @ [36mpos[0;1m <<<[m
+[[1;34mINFO[m] 
+[[1;34mINFO[m] 
+[[1;34mINFO[m] [1m--- [0;32mspring-boot-maven-plugin:3.2.1:run[m [1m(default-cli)[m @ [36mpos[0;1m ---[m
+[[1;34mINFO[m] Attaching agents: []
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+[32m :: Spring Boot :: [39m              [2m (v3.2.1)[0;39m
+
+[2m2026-06-27T10:59:31.276Z[0;39m [32m INFO[0;39m [35m1082[0;39m [2m---[0;39m [2m[           main][0;39m [2m[0;39m[36mlk.ijse.pos.PosApplication              [0;39m [2m:[0;39m Starting PosApplication using Java 19.0.2 with PID 1082 (/home/runner/workspace/pos-backend/target/classes started by runner in /home/runner/workspace/pos-backend)
+[2m2026-06-27T10:59:31.281Z[0;39m [32m INFO[0;39m [35m1082[0;39m [2m---[0;39m [2m[           main][0;39m [2m[0;39m[36mlk.ijse.pos.PosApplication              [0;39m [2m:[0;39m No active profile set, falling back to 1 default profile: "default"
+[2m2026-06-27T10:59:32.168Z[0;39m [32m INFO[0;39m [35m1082[0;39m [2m---[0;39m [2m[           main][0;39m [2m[0;39m[36m.s.d.r.c.RepositoryConfigurationDelegate[0;39m [2m:[0;39m Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+[2m2026-06-27T10:59:32.239Z[0;39m [32m INFO[0;39m [35m1082[0;39m [2m---[0;39m [2m[           main][0;39m [2m[0;39m[36m.s.d.r.c.RepositoryConfigurationDelegate[0;39m [2m:[0;39m Finished Spring Data repository scanning in 57 ms. Found 5 JPA repository interfaces.
+[2m2026-06-27T10:59:32.802Z[0;39m [32m INFO[0;39m [35m1082[0;39m [2m---[0;39m [2m[           main][0;39m [2m[0;39m[36mo.s.b.w.embedded.tomcat.TomcatWebServer [0;39m [2m:[0;39m Tomcat initialized with port 8080 (http)
+[2m2026-06-27T10:59:32.821Z[0;39m [32m INFO[0;39m [35m1082[0;39m [2m---[0;39m [2m[           main][0;39m [2m[0;39m[36mo.apache.catalina.core.StandardService  [0;39m [2m:[0;39m Starting service [Tomcat]
+[2m2026-06-27T10:59:32.822Z[0;39m [32m INFO[0;39m [35m1082[0;39m [2m---[0;39m [2m[           main][0;39m [2m[0;39m[36mo.apache.catalina.core.StandardEngine   [0;39m [2m:[0;39m Starting Servlet engine: [Apache Tomcat/10.1.17]
+[2m2026-06-27T10:59:32.890Z[0;39m [32m INFO[0;39m [35m1082[0;39m [2m---[0;39m [2m[           main][0;39m [2m[0;39m[36mo.a.c.c.C.[Tomcat].[localhost].[/]      [0;39m [2m:[0;39m Initializing Spring embedded WebApplicationContext
+[2m2026-06-27T10:59:32.891Z[0;39m [32m INFO[0;39m [35m1082[0;39m [2m---[0;39m [2m[           main][0;39m [2m[0;39m[36mw.s.c.ServletWebServerApplicationContext[0;39m [2m:[0;39m Root WebApplicationContext: initialization completed in 1547 ms
+[2m2026-06-27T10:59:33.029Z[0;39m [32m INFO[0;39m [35m1082[0;39m [2m---[0;39m [2m[           main][0;39m [2m[0;39m[36mo.hibernate.jpa.internal.util.LogHelper [0;39m [2m:[0;39m HHH000204: Processing PersistenceUnitInfo [name: default]
+[2m2026-06-27T10:59:33.093Z[0;39m [32m INFO[0;39m [35m1082[0;39m [2m---[0;39m [2m[           main][0;39m [2m[0;39m[36morg.hibernate.Version                   [0;39m [2m:[0;39m HHH000412: Hibernate ORM core version 6.4.1.Final
+[2m2026-06-27T10:59:33.135Z[0;39m [32m INFO[0;39m [35m1082[0;39m [2m---[0;39m [2m[           main][0;39m [2m[0;39m[36mo.h.c.internal.RegionFactoryInitiator   [0;39m [2m:[0;39m HHH000026: Second-level cache disabled
+[2m2026-06-27T10:59:33.399Z[0;39m [32m INFO[0;39m [35m1082[0;39m [2m---[0;39m [2m[           main][0;39m [2m[0;39m[36mo.s.o.j.p.SpringPersistenceUnitInfo     [0;39m [2m:[0;39m No LoadTimeWeaver setup: ignoring JPA class transformer
+[2m2026-06-27T10:59:33.430Z[0;39m [32m INFO[0;39m [35m1082[0;39m [2m---[0;39m [2m[           main][0;39m [2m[0;39m[36mcom.zaxxer.hikari.HikariDataSource      [0;39m [2m:[0;39m HikariPool-1 - Starting...
+[2m2026-06-27T10:59:33.575Z[0;39m [32m INFO[0;39m [35m1082[0;39m [2m---[0;39m [2m[           main][0;39m [2m[0;39m[36mcom.zaxxer.hikari.pool.HikariPool       [0;39m [2m:[0;39m HikariPool-1 - Added connection org.postgresql.jdbc.PgConnection@e0d1dc4
+[2m2026-06-27T10:59:33.576Z[0;39m [32m INFO[0;39m [35m1082[0;39m [2m---[0;39m [2m[           main][0;39m [2m[0;39m[36mcom.zaxxer.hikari.HikariDataSource      [0;39m [2m:[0;39m HikariPool-1 - Start completed.
+[2m2026-06-27T10:59:33.617Z[0;39m [33m WARN[0;39m [35m1082[0;39m [2m---[0;39m [2m[           main][0;39m [2m[0;39m[36morg.hibernate.orm.deprecation           [0;39m [2m:[0;39m HHH90000025: PostgreSQLDialect does not need to be specified explicitly using 'hibernate.dialect' (remove the property setting and it will be selected by default)
+[2m2026-06-27T10:59:34.392Z[0;39m [32m INFO[0;39m [35m1082[0;39m [2m---[0;39m [2m[           main][0;39m [2m[0;39m[36mo.h.e.t.j.p.i.JtaPlatformInitiator      [0;39m [2m:[0;39m HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
+[2m2026-06-27T10:59:34.514Z[0;39m [33m WARN[0;39m [35m1082[0;39m [2m---[0;39m [2m[           main][0;39m [2m[0;39m[36mo.h.engine.jdbc.spi.SqlExceptionHelper  [0;39m [2m:[0;39m SQL Warning Code: 0, SQLState: 00000
+[2m2026-06-27T10:59:34.515Z[0;39m [33m WARN[0;39m [35m1082[0;39m [2m---[0;39m [2m[           main][0;39m [2m[0;39m[36mo.h.engine.jdbc.spi.SqlExceptionHelper  [0;39m [2m:[0;39m constraint "uk_1j9d9a06i600gd43uu3km82jw" of relation "app_user" does not exist, skipping
+[2m2026-06-27T10:59:34.522Z[0;39m [33m WARN[0;39m [35m1082[0;39m [2m---[0;39m [2m[           main][0;39m [2m[0;39m[36mo.h.engine.jdbc.spi.SqlExceptionHelper  [0;39m [2m:[0;39m SQL Warning Code: 0, SQLState: 00000
+[2m2026-06-27T10:59:34.522Z[0;39m [33m WARN[0;39m [35m1082[0;39m [2m---[0;39m [2m[           main][0;39m [2m[0;39m[36mo.h.engine.jdbc.spi.SqlExceptionHelper  [0;39m [2m:[0;39m constraint "uk_3k4cplvh82srueuttfkwnylq0" of relation "app_user" does not exist, skipping
+[2m2026-06-27T10:59:34.531Z[0;39m [33m WARN[0;39m [35m1082[0;39m [2m---[0;39m [2m[           main][0;39m [2m[0;39m[36mo.h.engine.jdbc.spi.SqlExceptionHelper  [0;39m [2m:[0;39m SQL Warning Code: 0, SQLState: 00000
+[2m2026-06-27T10:59:34.531Z[0;39m [33m WARN[0;39m [35m1082[0;39m [2m---[0;39m [2m[           main][0;39m [2m[0;39m[36mo.h.engine.jdbc.spi.SqlExceptionHelper  [0;39m [2m:[0;39m constraint "uk_46ccwnsi9409t36lurvtyljak" of relation "category" does not exist, skipping
+[2m2026-06-27T10:59:34.547Z[0;39m [32m INFO[0;39m [35m1082[0;39m [2m---[0;39m [2m[           main][0;39m [2m[0;39m[36mj.LocalContainerEntityManagerFactoryBean[0;39m [2m:[0;39m Initialized JPA EntityManagerFactory for persistence unit 'default'
+[2m2026-06-27T10:59:34.959Z[0;39m [32m INFO[0;39m [35m1082[0;39m [2m---[0;39m [2m[           main][0;39m [2m[0;39m[36mo.s.d.j.r.query.QueryEnhancerFactory    [0;39m [2m:[0;39m Hibernate is in classpath; If applicable, HQL parser will be used.
+[2m2026-06-27T10:59:35.172Z[0;39m [33m WARN[0;39m [35m1082[0;39m [2m---[0;39m [2m[           main][0;39m [2m[0;39m[36mJpaBaseConfiguration$JpaWebConfiguration[0;39m [2m:[0;39m spring.jpa.open-in-view is enabled by default. Therefore, database queries may be performed during view rendering. Explicitly configure spring.jpa.open-in-view to disable this warning
+[2m2026-06-27T10:59:35.518Z[0;39m [32m INFO[0;39m [35m1082[0;39m [2m---[0;39m [2m[           main][0;39m [2m[0;39m[36mo.s.s.web.DefaultSecurityFilterChain    [0;39m [2m:[0;39m Will secure any request with [org.springframework.security.web.session.DisableEncodeUrlFilter@15a87fbb, org.springframework.security.web.context.request.async.WebAsyncManagerIntegrationFilter@6d92bfaf, org.springframework.security.web.context.SecurityContextHolderFilter@14ea3ecf, org.springframework.security.web.header.HeaderWriterFilter@54151d07, org.springframework.web.filter.CorsFilter@a23b96b, org.springframework.security.web.authentication.logout.LogoutFilter@19e03398, lk.ijse.pos.security.jwt.AuthTokenFilter@4797023d, org.springframework.security.web.savedrequest.RequestCacheAwareFilter@1252d480, org.springframework.security.web.servletapi.SecurityContextHolderAwareRequestFilter@59b8a801, org.springframework.security.web.authentication.AnonymousAuthenticationFilter@42af2977, org.springframework.security.web.session.SessionManagementFilter@c1d9c40, org.springframework.security.web.access.ExceptionTranslationFilter@3ed1446c, org.springframework.security.web.access.intercept.AuthorizationFilter@408708a1]
+[2m2026-06-27T10:59:35.826Z[0;39m [32m INFO[0;39m [35m1082[0;39m [2m---[0;39m [2m[           main][0;39m [2m[0;39m[36mo.s.b.w.embedded.tomcat.TomcatWebServer [0;39m [2m:[0;39m Tomcat started on port 8080 (http) with context path ''
+[2m2026-06-27T10:59:35.838Z[0;39m [32m INFO[0;39m [35m1082[0;39m [2m---[0;39m [2m[           main][0;39m [2m[0;39m[36mlk.ijse.pos.PosApplication              [0;39m [2m:[0;39m Started PosApplication in 5.069 seconds (process running for 5.451)
+[2m2026-06-27T11:00:06.618Z[0;39m [32m INFO[0;39m [35m1082[0;39m [2m---[0;39m [2m[nio-8080-exec-1][0;39m [2m[0;39m[36mo.a.c.c.C.[Tomcat].[localhost].[/]      [0;39m [2m:[0;39m Initializing Spring DispatcherServlet 'dispatcherServlet'
+[2m2026-06-27T11:00:06.618Z[0;39m [32m INFO[0;39m [35m1082[0;39m [2m---[0;39m [2m[nio-8080-exec-1][0;39m [2m[0;39m[36mo.s.web.servlet.DispatcherServlet       [0;39m [2m:[0;39m Initializing Servlet 'dispatcherServlet'
+[2m2026-06-27T11:00:06.620Z[0;39m [32m INFO[0;39m [35m1082[0;39m [2m---[0;39m [2m[nio-8080-exec-1][0;39m [2m[0;39m[36mo.s.web.servlet.DispatcherServlet       [0;39m [2m:[0;39m Completed initialization in 1 ms
+Token has been changed. Invalid
+Token has been changed. Invalid
+Token has been changed. Invalid
+Token has been changed. Invalid
+Token has been changed. Invalid
+Token has been changed. Invalid
+Token has been changed. Invalid
+Token has been changed. Invalid
+[0m[0m[2m2026-06-27T11:19:41.814Z[0;39m [32m INFO[0;39m [35m1082[0;39m [2m---[0;39m [2m[ionShutdownHook][0;39m [2m[0;39m[36mj.LocalContainerEntityManagerFactoryBean[0;39m [2m:[0;39m Closing JPA EntityManagerFactory for persistence unit 'default'
+[2m2026-06-27T11:19:41.828Z[0;39m [32m INFO[0;39m [35m1082[0;39m [2m---[0;39m [2m[ionShutdownHook][0;39m [2m[0;39m[36mcom.zaxxer.hikari.HikariDataSource      [0;39m [2m:[0;39m HikariPool-1 - Shutdown initiated...
+[2m2026-06-27T11:19:41.836Z[0;39m [32m INFO[0;39m [35m1082[0;39m [2m---[0;39m [2m[ionShutdownHook][0;39m [2m[0;39m[36mcom.zaxxer.hikari.HikariDataSource      [0;39m [2m:[0;39m HikariPool-1 - Shutdown completed.
