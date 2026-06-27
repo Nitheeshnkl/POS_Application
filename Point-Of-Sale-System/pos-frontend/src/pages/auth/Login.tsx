@@ -1,72 +1,129 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import apiClient from '../../api/client';
 import { useAuthStore } from '../../store/authStore';
+import { login } from '../../api/auth';
 
-const Login: React.FC = () => {
+export default function Login() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
-  const navigate = useNavigate();
-  const setAuth = useAuthStore((state) => state.setAuth);
+  const [error, setError]       = useState('');
+  const [loading, setLoading]   = useState(false);
+  const setAuth   = useAuthStore(s => s.setAuth);
+  const navigate  = useNavigate();
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
+    if (!username.trim() || !password.trim()) {
+      setError('Enter username and password');
+      return;
+    }
     setLoading(true);
     try {
-      const { data } = await apiClient.post('/auth/login', { username, password });
+      const data = await login({ username: username.trim(), password });
       setAuth(data.user, data.accessToken);
-      if (data.user.role === 'owner') {
-        navigate('/owner');
-      } else {
-        navigate('/cashier');
-      }
+      navigate(data.user.role === 'owner' ? '/owner' : '/cashier');
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Login failed');
+      setError(err?.response?.data?.message || 'Invalid username or password');
     } finally {
       setLoading(false);
     }
-  };
+  }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100">
-      <div className="bg-white p-8 rounded-lg shadow-md w-96">
-        <h1 className="text-2xl font-bold mb-6 text-center text-primary-600">Sri Murugan Store</h1>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Username</label>
+    <div style={{
+      minHeight: '100vh', display: 'flex', alignItems: 'center',
+      justifyContent: 'center', background: '#f5f4f0', padding: '20px'
+    }}>
+      <div style={{
+        background: '#fff', borderRadius: '12px', padding: '36px 28px',
+        width: '100%', maxWidth: '360px',
+        boxShadow: '0 2px 16px rgba(0,0,0,0.08)'
+      }}>
+
+        <div style={{ textAlign: 'center', marginBottom: '28px' }}>
+          <div style={{
+            width: '56px', height: '56px', borderRadius: '50%',
+            background: '#1a6b3c', display: 'inline-flex',
+            alignItems: 'center', justifyContent: 'center',
+            fontSize: '24px', color: '#fff', marginBottom: '12px'
+          }}>ம</div>
+          <h1 style={{ margin: 0, fontSize: '18px', fontWeight: 600, color: '#111' }}>
+            Sri Murugan Store
+          </h1>
+          <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#888' }}>
+            Sign in to continue
+          </p>
+        </div>
+
+        {error && (
+          <div style={{
+            background: '#fef2f2', border: '1px solid #fecaca',
+            color: '#b91c1c', borderRadius: '6px',
+            padding: '10px 12px', fontSize: '13px', marginBottom: '16px'
+          }}>{error}</div>
+        )}
+
+        <form onSubmit={handleSubmit}>
+          <div style={{ marginBottom: '14px' }}>
+            <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, color: '#333', marginBottom: '6px' }}>
+              Username
+            </label>
             <input
               type="text"
               value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm p-2 border"
-              required
+              onChange={e => setUsername(e.target.value)}
+              placeholder="Enter your username"
+              autoFocus
+              style={{
+                width: '100%', boxSizing: 'border-box',
+                border: '1px solid #d1d5db', borderRadius: '6px',
+                padding: '10px 12px', fontSize: '14px',
+                color: '#111', background: '#fff', outline: 'none'
+              }}
+              onFocus={e => e.target.style.borderColor = '#1a6b3c'}
+              onBlur={e => e.target.style.borderColor = '#d1d5db'}
             />
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Password</label>
+
+          <div style={{ marginBottom: '20px' }}>
+            <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, color: '#333', marginBottom: '6px' }}>
+              Password
+            </label>
             <input
               type="password"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm p-2 border"
-              required
+              onChange={e => setPassword(e.target.value)}
+              placeholder="Enter your password"
+              style={{
+                width: '100%', boxSizing: 'border-box',
+                border: '1px solid #d1d5db', borderRadius: '6px',
+                padding: '10px 12px', fontSize: '14px',
+                color: '#111', background: '#fff', outline: 'none'
+              }}
+              onFocus={e => e.target.style.borderColor = '#1a6b3c'}
+              onBlur={e => e.target.style.borderColor = '#d1d5db'}
             />
           </div>
-          {error && <p className="text-red-500 text-sm">{error}</p>}
+
           <button
             type="submit"
             disabled={loading}
-            className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+            style={{
+              width: '100%', padding: '11px',
+              background: loading ? '#6aad8a' : '#1a6b3c',
+              color: '#fff', border: 'none', borderRadius: '6px',
+              fontSize: '14px', fontWeight: 500, cursor: loading ? 'not-allowed' : 'pointer'
+            }}
           >
-            {loading ? 'Logging in...' : 'Login'}
+            {loading ? 'Signing in…' : 'Sign in'}
           </button>
         </form>
+
+        <p style={{ textAlign: 'center', fontSize: '12px', color: '#aaa', marginTop: '20px', marginBottom: 0 }}>
+          Sri Murugan Store Management System
+        </p>
       </div>
     </div>
   );
-};
-
-export default Login;
+}
