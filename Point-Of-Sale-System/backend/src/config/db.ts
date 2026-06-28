@@ -27,6 +27,12 @@ if (
 const pool = process.env.DATABASE_URL
   ? new Pool({
       connectionString: process.env.DATABASE_URL,
+      ssl:
+        process.env.NODE_ENV === 'production'
+          ? {
+              rejectUnauthorized: false,
+            }
+          : false,
     })
   : new Pool({
       host: process.env.PGHOST,
@@ -34,8 +40,8 @@ const pool = process.env.DATABASE_URL
       database: process.env.PGDATABASE,
       user: process.env.PGUSER,
       password: process.env.PGPASSWORD,
+      ssl: false,
     });
-
 export default pool;
 
 export const query = (
