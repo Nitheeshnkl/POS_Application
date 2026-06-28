@@ -27,6 +27,9 @@ if (
 const pool = process.env.DATABASE_URL
   ? new Pool({
       connectionString: process.env.DATABASE_URL,
+      max: Number(process.env.PG_MAX_CLIENTS || 10),
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 2000,
       ssl:
         process.env.NODE_ENV === 'production'
           ? {
@@ -40,6 +43,9 @@ const pool = process.env.DATABASE_URL
       database: process.env.PGDATABASE,
       user: process.env.PGUSER,
       password: process.env.PGPASSWORD,
+      max: Number(process.env.PG_MAX_CLIENTS || 10),
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 2000,
       ssl: false,
     });
 export default pool;
@@ -86,7 +92,50 @@ async function verifyConnection() {
   }
 }
 
-verifyConnection();
+// Ensure required core tables exist; if not, apply schema.sql as a fallback
+async function ensureCoreTables() {
+  try {
+    const check = await pool.query(`
+      SELECT table_name FROM information_schema.tables
+      WHERE table_schema = 'public' AND table_name IN ('users','bills','products','cashouts','expenses')
+    `);
+
+    const found = check.rows.map(r => r.table_name);
+    const required = ['users','bills','products','cashouts','expenses'];
+    const missing = required.filter(t => !found.includes(t));
+
+    if (missing.length === 0) {
+      logger.info('All core tables exist');
+      return;
+    }
+
+    logger.info(`Missing core tables: ${missing.join(', ')}. Attempting to apply fallback schema.sql`);
+
+    const schemaPath = path.join(process.cwd(), 'src', 'schema.sql');
+    const altSchemaPath = path.join(process.cwd(), 'backend', 'schema.sql');
+    let schemaFile = '';
+    if (fs.existsSync(schemaPath)) schemaFile = schemaPath;
+    else if (fs.existsSync(altSchemaPath)) schemaFile = altSchemaPath;
+
+    if (!schemaFile) {
+      logger.error('No schema.sql found to create missing tables');
+      return;
+    }
+
+    const sql = fs.readFileSync(schemaFile, 'utf8');
+    await pool.query(sql);
+    logger.info('Fallback schema applied successfully');
+  } catch (err: any) {
+    logger.error(`Failed to ensure core tables: ${err.message}`);
+    throw err;
+  }
+}
+
+// Run verification and ensure core tables exist. Do not crash non-production dev environments.
+verifyConnection().then(() => ensureCoreTables()).catch(err => {
+  logger.error(`DB initialization error: ${err.message}`);
+  if (process.env.NODE_ENV === 'production') process.exit(1);
+});
 
 /*
 |--------------------------------------------------------------------------
@@ -122,41 +171,50 @@ export async function runMigrations(): Promise<void> {
     }
 
     if (!migrationsDir) {
-      logger.info(
-        'No migrations directory found, skipping.'
-      );
+      logger.info('No migrations directory found, skipping.');
       return;
     }
 
-    logger.info(
-      `Using migrations directory: ${migrationsDir}`
-    );
+    logger.info(`Using migrations directory: ${migrationsDir}`);
 
-    const files = fs
-      .readdirSync(migrationsDir)
-      .filter(f => f.endsWith('.sql'))
-      .sort();
+    const files = fs.readdirSync(migrationsDir).filter(f => f.endsWith('.sql')).sort();
 
-    for (const file of files) {
-      logger.info(
-        `Running migration: ${file}`
-      );
+    // Ensure migrations_applied table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS migrations_applied (
+        id SERIAL PRIMARY KEY,
+        filename TEXT UNIQUE NOT NULL,
+        applied_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
 
-      const sql = fs.readFileSync(
-        path.join(migrationsDir, file),
-        'utf8'
-      );
-
-      await pool.query(sql);
-
-      logger.info(
-        `Migration applied: ${file}`
-      );
+    // Acquire advisory lock so concurrent instances don't run migrations simultaneously
+    const lockId = 123456789; // constant lock for this project
+    const gotLock = (await pool.query('SELECT pg_try_advisory_lock($1) AS locked', [lockId])).rows[0].locked;
+    if (!gotLock) {
+      logger.info('Another instance is running migrations; skipping.');
+      return;
     }
 
-    logger.info(
-      'Database migration completed successfully.'
-    );
+    try {
+      for (const file of files) {
+        const { rows } = await pool.query('SELECT 1 FROM migrations_applied WHERE filename = $1', [file]);
+        if (rows.length > 0) {
+          logger.info(`Skipping already-applied migration: ${file}`);
+          continue;
+        }
+
+        logger.info(`Running migration: ${file}`);
+        const sql = fs.readFileSync(path.join(migrationsDir, file), 'utf8');
+        await pool.query(sql);
+        await pool.query('INSERT INTO migrations_applied (filename) VALUES ($1) ON CONFLICT DO NOTHING', [file]);
+        logger.info(`Migration applied: ${file}`);
+      }
+      logger.info('Database migration completed successfully.');
+    } finally {
+      // Release advisory lock
+      await pool.query('SELECT pg_advisory_unlock($1)', [lockId]);
+    }
   } catch (err: any) {
     logger.error(
       `Migration failed: ${err.message}`

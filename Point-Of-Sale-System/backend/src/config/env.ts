@@ -25,8 +25,8 @@ export function validateEnv() {
   const nodeEnv = process.env.NODE_ENV || 'development';
   if (nodeEnv === 'production') {
     if (!process.env.DATABASE_URL) missing.push('DATABASE_URL');
-    if (!process.env.CORS_ORIGIN) missing.push('CORS_ORIGIN');
-    if (!process.env.FRONTEND_URL) missing.push('FRONTEND_URL');
+    // Allow either CORS_ORIGIN or FRONTEND_URL (we will derive origin from FRONTEND_URL)
+    if (!process.env.CORS_ORIGIN && !process.env.FRONTEND_URL) missing.push('CORS_ORIGIN or FRONTEND_URL');
     if (!process.env.JWT_EXPIRES) missing.push('JWT_EXPIRES');
   } else {
     // For non-production, allow DATABASE_URL or individual PG_* vars
@@ -49,5 +49,22 @@ export const env = {
   JWT_EXPIRES: process.env.JWT_EXPIRES || '15m',
   DATABASE_URL: process.env.DATABASE_URL || '',
   FRONTEND_URL: process.env.FRONTEND_URL || '',
-  CORS_ORIGIN: process.env.CORS_ORIGIN || '',
+  // Normalize CORS origin: prefer explicit CORS_ORIGIN, otherwise derive origin from FRONTEND_URL
+  CORS_ORIGIN: (() => {
+    try {
+      if (process.env.CORS_ORIGIN && process.env.CORS_ORIGIN.trim()) {
+        // strip any trailing path
+        const url = new URL(process.env.CORS_ORIGIN);
+        return url.origin;
+      }
+      if (process.env.FRONTEND_URL && process.env.FRONTEND_URL.trim()) {
+        const url = new URL(process.env.FRONTEND_URL);
+        return url.origin;
+      }
+    } catch (err) {
+      // fallback to raw env value if URL parse fails
+      return process.env.CORS_ORIGIN || process.env.FRONTEND_URL || '';
+    }
+    return '';
+  })(),
 };

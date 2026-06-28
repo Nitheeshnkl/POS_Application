@@ -34,7 +34,12 @@ app.use(helmet());
 app.use(compression());
 
 app.use(cors({
-  origin: env.CORS_ORIGIN,
+  origin: (requestOrigin, callback) => {
+    // Allow no-origin (e.g. server-to-server) and exact frontend origin only
+    if (!requestOrigin) return callback(null, true);
+    if (env.CORS_ORIGIN && requestOrigin === env.CORS_ORIGIN) return callback(null, true);
+    return callback(new Error('Not allowed by CORS'));
+  },
   credentials: true,
 }));
 
@@ -79,8 +84,25 @@ app.get('/api/v1/audit-logs', (req: Request, res: Response) => {
   res.json({ success: true, data: [] });
 });
 
-app.get('/health', (req: Request, res: Response) => {
-  res.json({ status: 'ok', db: 'connected', env: 'production' });
+app.get('/health', async (req: Request, res: Response) => {
+  try {
+    // quick DB ping
+    const { rows } = await (await import('./config/db.js')).query('SELECT 1 AS ok');
+    const dbConnected = rows && rows.length > 0;
+
+    // verify core tables
+    const missingRes = await (await import('./config/db.js')).query(`
+      SELECT table_name FROM information_schema.tables
+      WHERE table_schema = 'public' AND table_name IN ('users','bills','products','cashouts','expenses')
+    `);
+    const found = missingRes.rows.map(r => r.table_name);
+    const required = ['users','bills','products','cashouts','expenses'];
+    const missing = required.filter(t => !found.includes(t));
+
+    return res.json({ status: 'ok', db: dbConnected ? 'connected' : 'disconnected', missing_tables: missing, env: env.NODE_ENV });
+  } catch (err: any) {
+    return res.status(500).json({ status: 'error', message: err.message });
+  }
 });
 
 app.use(errorHandler);

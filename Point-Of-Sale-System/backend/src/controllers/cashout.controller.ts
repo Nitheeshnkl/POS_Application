@@ -7,42 +7,32 @@ const getTodayInAsiaKolkata = () => new Intl.DateTimeFormat('en-CA', { timeZone:
 // Helper: compute daily cash/gpay figures from bills & expenses for a given date
 // ──────────────────────────────────────────────────────────────────────────────
 async function getDailyFigures(date: string) {
-  const salesResult = await pool.query(`
-    SELECT
-      COALESCE(
-        SUM(
-          CASE
-            WHEN LOWER(payment_mode) = 'cash' THEN grand_total
-            ELSE 0
-          END
-        ),
-        0
-      ) AS cash_sales,
-      COALESCE(
-        SUM(
-          CASE
-            WHEN LOWER(payment_mode) IN ('gpay', 'upi', 'online') THEN grand_total
-            ELSE 0
-          END
-        ),
-        0
-      ) AS gpay_sales
-    FROM bills
-    WHERE DATE(created_at AT TIME ZONE 'Asia/Kolkata') = $1
-      AND COALESCE(payment_status, 'paid') NOT IN ('draft', 'cancelled', 'deleted')
-  `, [date]);
+  // Use timezone-aware date comparison. Use PostgreSQL `timezone()` to normalize
+  // timestamps into Asia/Kolkata and compare the date portion. This avoids
+  // relying on the DB server timezone and is resilient for Render deployments.
+  const salesResult = await pool.query(
+    `SELECT
+       COALESCE(SUM(CASE WHEN LOWER(COALESCE(payment_mode, '')) LIKE '%cash%' AND grand_total > 0 THEN grand_total ELSE 0 END), 0) AS cash_sales,
+       COALESCE(SUM(CASE WHEN (LOWER(COALESCE(payment_mode, '')) LIKE '%gpay%' OR LOWER(COALESCE(payment_mode, '')) LIKE '%upi%' OR LOWER(COALESCE(payment_mode, '')) LIKE '%online%' OR LOWER(COALESCE(payment_mode, '')) LIKE '%card%') AND grand_total > 0 THEN grand_total ELSE 0 END), 0) AS gpay_sales
+     FROM bills
+     WHERE timezone('Asia/Kolkata', created_at)::date = $1::date
+       AND COALESCE(payment_status, 'paid') NOT IN ('draft', 'cancelled', 'deleted')
+    `, [date]
+  );
 
-  const expensesResult = await pool.query(`
-    SELECT COALESCE(SUM(amount), 0) AS expenses
-    FROM expenses
-    WHERE DATE(COALESCE(date, created_at)) = $1
-  `, [date]);
+  const expensesResult = await pool.query(
+    `SELECT COALESCE(SUM(amount), 0) AS expenses
+     FROM expenses
+     WHERE timezone('Asia/Kolkata', COALESCE(date::timestamp, created_at))::date = $1::date
+    `, [date]
+  );
 
   const cashBills = Number(salesResult.rows[0].cash_sales ?? 0);
   const gpayBills = Number(salesResult.rows[0].gpay_sales ?? 0);
   const expenses = Number(expensesResult.rows[0].expenses ?? 0);
 
-  console.log({ today: date, cashBills, gpayBills, expenses });
+  // Keep a lightweight log for debugging in production (logger would be better)
+  console.info({ today: date, cashBills, gpayBills, expenses });
 
   return { cash_sales: cashBills, gpay_sales: gpayBills, expenses };
 }
