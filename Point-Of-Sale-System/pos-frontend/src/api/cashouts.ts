@@ -18,7 +18,7 @@ export interface CashoutRecord {
 
 export const getCurrentDrawer = async (): Promise<CashoutRecord> => {
   const res = await api.get('/cashout/current');
-  return res.data.data;
+  return res.data?.data ?? null;
 };
 
 export const saveCashout = async (data: {
@@ -29,19 +29,18 @@ export const saveCashout = async (data: {
   date?: string;
 }): Promise<CashoutRecord> => {
   const res = await api.post('/cashout/save', data);
-  return res.data.data;
+  return res.data?.data ?? null;
 };
-
 
 export const editCashout = async (
   id: number,
   data: { opening_cash?: number; actual_cash?: number; notes?: string }
 ): Promise<CashoutRecord> => {
   const res = await api.put(`/cashout/${id}`, data);
-  return res.data.data;
+  return res.data?.data ?? null;
 };
 
 export const getCashoutHistory = async (): Promise<CashoutRecord[]> => {
   const res = await api.get('/cashout/history');
-  return Array.isArray(res.data.data) ? res.data.data : [];
+  return Array.isArray(res.data?.data) ? res.data.data : [];
 };

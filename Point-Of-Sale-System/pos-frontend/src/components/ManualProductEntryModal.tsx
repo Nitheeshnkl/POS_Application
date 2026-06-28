@@ -38,7 +38,7 @@ export const ManualProductEntryModal: React.FC<ManualProductEntryModalProps> = (
       setPurchasePrice('');
       setSellingPrice('');
       setOpeningStock('');
-      if (categories.length > 0) setCategoryId(categories[0].id);
+      if (categories.length > 0) setCategoryId(Number(categories[0].id));
     }
   }, [isOpen, initialSearch, categories]);
 

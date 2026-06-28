@@ -81,10 +81,16 @@ export const createProduct = async (req, res, next) => {
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
-        const { category_id, name_en, name_ta, barcode, unit_type, purchase_price, selling_price, initial_stock, min_stock_alert, gst_rate } = req.body;
+        const { category_id, category, name_en, name_ta, barcode, unit_type, unit, purchase_price, selling_price, initial_stock, opening_stock, min_stock_alert, gst_rate } = req.body;
+        const actual_category_id = category_id || category || null;
+        const actual_unit_type = unit_type || unit || 'pcs';
+        const actual_initial_stock = initial_stock !== undefined ? initial_stock : (opening_stock || 0);
+        if (!name_en) {
+            return res.status(400).json({ success: false, message: 'Product name is required' });
+        }
         const productResult = await client.query(`INSERT INTO products 
        (category_id, name_en, name_ta, barcode, unit_type, purchase_price, selling_price, current_stock, min_stock_alert, gst_rate) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`, [category_id || null, name_en, name_ta, barcode, unit_type, purchase_price || 0, selling_price || 0, initial_stock || 0, min_stock_alert || 5, gst_rate || 0]);
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`, [actual_category_id, name_en, name_ta, barcode, actual_unit_type, purchase_price || 0, selling_price || 0, actual_initial_stock, min_stock_alert || 5, gst_rate || 0]);
         const product = productResult.rows[0];
         if (initial_stock && initial_stock > 0) {
             await client.query(`INSERT INTO stock_movements 

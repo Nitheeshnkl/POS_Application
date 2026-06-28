@@ -2,7 +2,9 @@ import dotenv from 'dotenv';
 dotenv.config();
 const requiredEnvVars = [
     'JWT_ACCESS_SECRET',
-    'JWT_REFRESH_SECRET',
+    'JWT_REFRESH_SECRET'
+];
+const fallbackDbVars = [
     'PGHOST',
     'PGPORT',
     'PGDATABASE',
@@ -11,6 +13,12 @@ const requiredEnvVars = [
 ];
 export function validateEnv() {
     const missing = requiredEnvVars.filter(envVar => !process.env[envVar]);
+    if (!process.env.DATABASE_URL) {
+        const missingDb = fallbackDbVars.filter(envVar => !process.env[envVar]);
+        if (missingDb.length > 0) {
+            missing.push(...missingDb);
+        }
+    }
     if (missing.length > 0) {
         throw new Error(`Missing environment variables: ${missing.join(', ')}`);
     }
