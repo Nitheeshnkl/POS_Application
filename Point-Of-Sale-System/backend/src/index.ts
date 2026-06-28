@@ -1,5 +1,6 @@
 import express, { Request, Response } from 'express';
 import cors from 'cors';
+import rateLimit from 'express-rate-limit';
 import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import compression from 'compression';
@@ -36,6 +37,23 @@ app.use(cors({
   origin: env.CORS_ORIGIN,
   credentials: true,
 }));
+
+// Rate limiting
+app.use(rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: process.env.RATE_LIMIT_MAX ? Number(process.env.RATE_LIMIT_MAX) : 200,
+  standardHeaders: true,
+  legacyHeaders: false,
+}));
+
+// Basic request timeout to prevent slowloris-style hanging requests
+app.use((req, res, next) => {
+  // 2 minutes default
+  res.setTimeout(2 * 60 * 1000, () => {
+    res.status(503).json({ success: false, message: 'Request timed out' });
+  });
+  next();
+});
 
 app.use(express.json());
 app.use(cookieParser());

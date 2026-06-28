@@ -16,6 +16,14 @@ const pool = new Pool(process.env.DATABASE_URL
     });
 export const query = (text, params) => pool.query(text, params);
 export default pool;
+// Diagnostic query on initialization
+pool.query('SELECT current_database(), current_schema();')
+    .then(res => {
+    logger.info(`Connected to DB: ${res.rows[0].current_database}, Schema: ${res.rows[0].current_schema}`);
+})
+    .catch(err => {
+    logger.error(`Diagnostic query failed: ${err.message}`);
+});
 /**
  * Runs all SQL migration files in src/db/migrations/ on startup.
  * Every migration uses IF NOT EXISTS / DROP IF EXISTS — safe to re-run.
@@ -24,9 +32,15 @@ export async function runMigrations() {
     try {
         const __filename = fileURLToPath(import.meta.url);
         const __dirname = path.dirname(__filename);
-        const migrationsDir = path.join(__dirname, '../db/migrations');
+        // In compiled dist/, __dirname is dist/config.
+        // So ../db/migrations looks in dist/db/migrations (which is empty because tsc ignores .sql).
+        // Fallback to process.cwd()/src/db/migrations which exists in Render deployments.
+        let migrationsDir = path.join(__dirname, '../db/migrations');
         if (!fs.existsSync(migrationsDir)) {
-            logger.info('No migrations directory found, skipping.');
+            migrationsDir = path.join(process.cwd(), 'src/db/migrations');
+        }
+        if (!fs.existsSync(migrationsDir)) {
+            logger.info(`No migrations directory found at ${migrationsDir}, skipping.`);
             return;
         }
         const files = fs.readdirSync(migrationsDir)

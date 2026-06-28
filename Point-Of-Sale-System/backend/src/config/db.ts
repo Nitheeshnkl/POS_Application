@@ -7,47 +7,155 @@ import { logger } from '../utils/logger.js';
 
 dotenv.config();
 
-const pool = new Pool(
-  process.env.DATABASE_URL
-    ? { connectionString: process.env.DATABASE_URL }
-    : {
-        host: process.env.PGHOST || 'helium',
-        port: parseInt(process.env.PGPORT || '5432'),
-        database: process.env.PGDATABASE || 'heliumdb',
-        user: process.env.PGUSER || 'postgres',
-        password: process.env.PGPASSWORD || 'password',
-      }
-);
+/*
+|--------------------------------------------------------------------------
+| Database Configuration
+|--------------------------------------------------------------------------
+*/
 
-export const query = (text: string, params?: any[]) => pool.query(text, params);
+// Production must use DATABASE_URL
+if (
+  process.env.NODE_ENV === 'production' &&
+  !process.env.DATABASE_URL
+) {
+  throw new Error(
+    'DATABASE_URL is required in production'
+  );
+}
+
+// Create pool
+const pool = process.env.DATABASE_URL
+  ? new Pool({
+      connectionString: process.env.DATABASE_URL,
+    })
+  : new Pool({
+      host: process.env.PGHOST,
+      port: Number(process.env.PGPORT || 5432),
+      database: process.env.PGDATABASE,
+      user: process.env.PGUSER,
+      password: process.env.PGPASSWORD,
+    });
+
 export default pool;
 
-/**
- * Runs all SQL migration files in src/db/migrations/ on startup.
- * Every migration uses IF NOT EXISTS / DROP IF EXISTS — safe to re-run.
- */
+export const query = (
+  text: string,
+  params?: any[]
+) => pool.query(text, params);
+
+/*
+|--------------------------------------------------------------------------
+| Startup Diagnostics
+|--------------------------------------------------------------------------
+*/
+
+async function verifyConnection() {
+  try {
+    const result = await pool.query(`
+      SELECT
+        current_database(),
+        current_schema()
+    `);
+
+    logger.info(
+      `DB Connected → Database: ${result.rows[0].current_database}, Schema: ${result.rows[0].current_schema}`
+    );
+
+    // Force schema
+    await pool.query(`
+      SET search_path TO public
+    `);
+
+    logger.info(
+      'PostgreSQL search_path set to public'
+    );
+  } catch (err: any) {
+    logger.error(
+      `Database startup verification failed: ${err.message}`
+    );
+
+    if (process.env.NODE_ENV === 'production') {
+      process.exit(1);
+    }
+  }
+}
+
+verifyConnection();
+
+/*
+|--------------------------------------------------------------------------
+| Migration Runner
+|--------------------------------------------------------------------------
+*/
+
 export async function runMigrations(): Promise<void> {
   try {
     const __filename = fileURLToPath(import.meta.url);
-    const __dirname  = path.dirname(__filename);
-    const migrationsDir = path.join(__dirname, '../db/migrations');
+    const __dirname = path.dirname(__filename);
 
-    if (!fs.existsSync(migrationsDir)) {
-      logger.info('No migrations directory found, skipping.');
+    const possiblePaths = [
+      path.join(__dirname, '../db/migrations'),
+      path.join(process.cwd(), 'src/db/migrations'),
+      path.join(
+        process.cwd(),
+        'backend/src/db/migrations'
+      ),
+      path.join(
+        process.cwd(),
+        'dist/db/migrations'
+      ),
+    ];
+
+    let migrationsDir = '';
+
+    for (const p of possiblePaths) {
+      if (fs.existsSync(p)) {
+        migrationsDir = p;
+        break;
+      }
+    }
+
+    if (!migrationsDir) {
+      logger.info(
+        'No migrations directory found, skipping.'
+      );
       return;
     }
 
-    const files = fs.readdirSync(migrationsDir)
+    logger.info(
+      `Using migrations directory: ${migrationsDir}`
+    );
+
+    const files = fs
+      .readdirSync(migrationsDir)
       .filter(f => f.endsWith('.sql'))
-      .sort(); // run in alphabetical order
+      .sort();
 
     for (const file of files) {
-      const sql = fs.readFileSync(path.join(migrationsDir, file), 'utf8');
+      logger.info(
+        `Running migration: ${file}`
+      );
+
+      const sql = fs.readFileSync(
+        path.join(migrationsDir, file),
+        'utf8'
+      );
+
       await pool.query(sql);
-      logger.info(`Migration applied: ${file}`);
+
+      logger.info(
+        `Migration applied: ${file}`
+      );
     }
+
+    logger.info(
+      'Database migration completed successfully.'
+    );
   } catch (err: any) {
-    // Log but do not crash — let the server start; partial failures are visible in logs
-    logger.info(`Migration warning: ${err.message}`);
+    logger.error(
+      `Migration failed: ${err.message}`
+    );
+
+    throw err;
   }
 }

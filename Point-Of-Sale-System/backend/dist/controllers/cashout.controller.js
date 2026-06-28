@@ -1,39 +1,52 @@
 import pool from '../config/db.js';
+const getTodayInAsiaKolkata = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
 // ──────────────────────────────────────────────────────────────────────────────
 // Helper: compute daily cash/gpay figures from bills & expenses for a given date
 // ──────────────────────────────────────────────────────────────────────────────
 async function getDailyFigures(date) {
-    // Bills: use DATE(created_at) as bill_date does not exist
     const salesResult = await pool.query(`
     SELECT
-      COALESCE(SUM(grand_total) FILTER (WHERE payment_mode = 'cash'), 0) AS cash_sales,
-      COALESCE(SUM(grand_total) FILTER (
-        WHERE payment_mode = 'gpay'
-      ), 0) AS gpay_sales
+      COALESCE(
+        SUM(
+          CASE
+            WHEN LOWER(payment_mode) = 'cash' THEN grand_total
+            ELSE 0
+          END
+        ),
+        0
+      ) AS cash_sales,
+      COALESCE(
+        SUM(
+          CASE
+            WHEN LOWER(payment_mode) IN ('gpay', 'upi', 'online') THEN grand_total
+            ELSE 0
+          END
+        ),
+        0
+      ) AS gpay_sales
     FROM bills
-    WHERE
-      DATE(created_at) = $1
-      AND payment_status NOT IN ('draft','cancelled','deleted')
+    WHERE DATE(created_at AT TIME ZONE 'Asia/Kolkata') = $1
+      AND COALESCE(payment_status, 'paid') NOT IN ('draft', 'cancelled', 'deleted')
   `, [date]);
-    // Expenses: ALL payment modes counted against the cash drawer total
     const expensesResult = await pool.query(`
     SELECT COALESCE(SUM(amount), 0) AS expenses
     FROM expenses
     WHERE DATE(COALESCE(date, created_at)) = $1
   `, [date]);
-    const cash_sales = Number(salesResult.rows[0].cash_sales);
-    const gpay_sales = Number(salesResult.rows[0].gpay_sales);
-    const expenses = Number(expensesResult.rows[0].expenses);
-    return { cash_sales, gpay_sales, expenses };
+    const cashBills = Number(salesResult.rows[0].cash_sales ?? 0);
+    const gpayBills = Number(salesResult.rows[0].gpay_sales ?? 0);
+    const expenses = Number(expensesResult.rows[0].expenses ?? 0);
+    console.log({ today: date, cashBills, gpayBills, expenses });
+    return { cash_sales: cashBills, gpay_sales: gpayBills, expenses };
 }
 // ──────────────────────────────────────────────────────────────────────────────
 // GET /cashout/current
 // ──────────────────────────────────────────────────────────────────────────────
 export const getCurrentDrawer = async (_req, res, next) => {
     try {
-        const today = new Date().toISOString().split('T')[0];
+        const today = getTodayInAsiaKolkata();
         const { cash_sales, gpay_sales, expenses } = await getDailyFigures(today);
-        const existing = await pool.query(`SELECT * FROM cashouts WHERE cashout_date = $1 ORDER BY id DESC LIMIT 1`, [today]);
+        const existing = await pool.query(`SELECT * FROM cashouts WHERE DATE(created_at) = $1 ORDER BY created_at DESC, id DESC LIMIT 1`, [today]);
         if (existing.rows.length > 0) {
             const row = existing.rows[0];
             const opening_cash = Number(row.opening_cash) || 0;
@@ -60,10 +73,24 @@ export const getCurrentDrawer = async (_req, res, next) => {
                 }
             });
         }
-        // No record yet — return success:true, data:null per user instruction
+        const opening_cash = 0;
+        const expected_cash = opening_cash + cash_sales - expenses;
         return res.json({
             success: true,
-            data: null
+            data: {
+                id: null,
+                cashout_date: today,
+                opening_cash,
+                cash_sales,
+                gpay_sales,
+                expenses,
+                expected_cash,
+                actual_cash: null,
+                actual_gpay: null,
+                difference: null,
+                gpay_difference: null,
+                notes: ''
+            }
         });
     }
     catch (error) {
@@ -75,7 +102,7 @@ export const getCurrentDrawer = async (_req, res, next) => {
 // ──────────────────────────────────────────────────────────────────────────────
 export const saveCashout = async (req, res, next) => {
     try {
-        const date = req.body.date || new Date().toISOString().split('T')[0];
+        const date = req.body.date || getTodayInAsiaKolkata();
         const opening_cash = Number(req.body.opening_cash ?? 0);
         const actual_cash = Number(req.body.actual_cash ?? 0);
         const actual_gpay = req.body.actual_gpay != null ? Number(req.body.actual_gpay) : null;

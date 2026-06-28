@@ -28,7 +28,7 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       try {
         const token = JSON.parse(authStore).state?.accessToken;
         if (token) {
-          fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1'}/settings`, {
+          fetch(`${import.meta.env.VITE_API_URL || '/api/v1'}/settings`, {
             headers: { 'Authorization': `Bearer ${token}` }
           })
             .then(res => res.json())
