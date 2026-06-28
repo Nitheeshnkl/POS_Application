@@ -26,7 +26,8 @@ const Cashout: React.FC = () => {
     queryFn: getCurrentDrawer,
     retry: false,
     refetchOnWindowFocus: false,
-    staleTime: 30000,
+    refetchOnMount: true,
+    staleTime: 0,
   });
 
   const [form, setForm] = useState({
@@ -72,12 +73,12 @@ const Cashout: React.FC = () => {
   );
 
   // ── live computed values ──
-  const opening       = parseFloat(form.openingCash) || 0;
+  const opening       = Number(form.openingCash || 0);
   const actual        = parseFloat(form.actualCash);
   const actualGpay    = parseFloat(form.actualGpay);
-  const cashSales     = drawer?.cash_sales  ?? 0;
-  const gpaySales     = drawer?.gpay_sales  ?? 0;
-  const expenses      = drawer?.expenses    ?? 0;
+  const cashSales     = Number(drawer?.cash_sales || 0);
+  const gpaySales     = Number(drawer?.gpay_sales || 0);
+  const expenses      = Number(drawer?.expenses || 0);
   const expectedCash  = opening + cashSales - expenses;
   const cashDiff      = !isNaN(actual)     ? actual     - expectedCash : null;
   const gpayDiff      = !isNaN(actualGpay) ? actualGpay - gpaySales   : null;

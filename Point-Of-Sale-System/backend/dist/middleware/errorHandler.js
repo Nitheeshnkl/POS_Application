@@ -1,5 +1,6 @@
+import { logger } from '../utils/logger.js';
 export const errorHandler = (err, req, res, next) => {
-    console.error(err.stack);
+    logger.error(err.message || 'Internal Server Error', err.stack);
     let status = err.status || 500;
     let message = err.message || 'Internal Server Error';
     // Map Postgres errors
@@ -19,8 +20,5 @@ export const errorHandler = (err, req, res, next) => {
         status = 400;
         message = 'Related record does not exist or cannot be deleted.';
     }
-    res.status(status).json({
-        message,
-        stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
-    });
+    res.status(status).json({ message });
 };

@@ -53,3 +53,35 @@ export const getSupplierPurchases = async (req, res, next) => {
         next(error);
     }
 };
+export const getSupplierTransactions = async (req, res, next) => {
+    try {
+        const { id } = req.params;
+        const result = await pool.query('SELECT * FROM supplier_transactions WHERE supplier_id = $1 ORDER BY created_at DESC', [id]);
+        res.json(result.rows);
+    }
+    catch (error) {
+        next(error);
+    }
+};
+export const addSupplierTransaction = async (req, res, next) => {
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+        const { id } = req.params;
+        const { type, amount, reference_id, notes } = req.body;
+        const result = await client.query('INSERT INTO supplier_transactions (supplier_id, type, amount, reference_id, notes) VALUES ($1, $2, $3, $4, $5) RETURNING *', [id, type, amount, reference_id, notes]);
+        // Update supplier balance
+        // If it's a purchase, they owe more (balance increases). If it's a payment, balance decreases.
+        const modifier = type === 'purchase' ? 1 : type === 'payment' ? -1 : 1;
+        await client.query('UPDATE suppliers SET balance = balance + $1 WHERE id = $2', [amount * modifier, id]);
+        await client.query('COMMIT');
+        res.status(201).json(result.rows[0]);
+    }
+    catch (error) {
+        await client.query('ROLLBACK');
+        next(error);
+    }
+    finally {
+        client.release();
+    }
+};

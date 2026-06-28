@@ -6,9 +6,13 @@ export const setupRequired = async (req, res, next) => {
     try {
         const { rows } = await pool.query('SELECT COUNT(*) FROM users');
         const count = parseInt(rows[0].count);
-        res.json({ required: count === 0 });
+        res.json({ setupRequired: count === 0 });
     }
     catch (error) {
+        // If the table doesn't exist (e.g. relation "users" does not exist), this means setup is definitely required.
+        if (error.code === '42P01') {
+            return res.json({ setupRequired: true });
+        }
         next(error);
     }
 };

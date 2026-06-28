@@ -1,103 +1,238 @@
 import pool from '../config/db.js';
-async function getExpectedTotals() {
-    const result = await pool.query(`
+// ──────────────────────────────────────────────────────────────────────────────
+// Helper: compute daily cash/gpay figures from bills & expenses for a given date
+// ──────────────────────────────────────────────────────────────────────────────
+async function getDailyFigures(date) {
+    // Bills: use DATE(created_at) as bill_date does not exist
+    const salesResult = await pool.query(`
     SELECT
-      COALESCE(SUM(grand_total) FILTER (WHERE payment_mode = 'cash'   AND payment_status = 'paid'), 0) AS expected_cash,
-      COALESCE(SUM(grand_total) FILTER (WHERE payment_mode = 'upi'    AND payment_status = 'paid'), 0) AS expected_gpay,
-      COALESCE(SUM(grand_total) FILTER (WHERE payment_mode = 'card'   AND payment_status = 'paid'), 0) AS expected_card,
-      COALESCE(SUM(grand_total) FILTER (WHERE payment_mode = 'credit' AND payment_status = 'paid'), 0) AS expected_credit,
-      COALESCE(SUM(grand_total) FILTER (WHERE payment_status = 'paid'), 0) AS expected_total,
-      COUNT(*) FILTER (WHERE payment_status = 'paid') AS bill_count,
-      COUNT(*) FILTER (WHERE payment_status = 'cancelled') AS cancelled_count
+      COALESCE(SUM(grand_total) FILTER (WHERE payment_mode = 'cash'), 0) AS cash_sales,
+      COALESCE(SUM(grand_total) FILTER (
+        WHERE payment_mode = 'gpay'
+      ), 0) AS gpay_sales
     FROM bills
-    WHERE DATE(created_at) = CURRENT_DATE
-  `);
-    return result.rows[0];
+    WHERE
+      DATE(created_at) = $1
+      AND payment_status NOT IN ('draft','cancelled','deleted')
+  `, [date]);
+    // Expenses: ALL payment modes counted against the cash drawer total
+    const expensesResult = await pool.query(`
+    SELECT COALESCE(SUM(amount), 0) AS expenses
+    FROM expenses
+    WHERE DATE(COALESCE(date, created_at)) = $1
+  `, [date]);
+    const cash_sales = Number(salesResult.rows[0].cash_sales);
+    const gpay_sales = Number(salesResult.rows[0].gpay_sales);
+    const expenses = Number(expensesResult.rows[0].expenses);
+    return { cash_sales, gpay_sales, expenses };
 }
-export const getTodaySummary = async (_req, res, next) => {
+// ──────────────────────────────────────────────────────────────────────────────
+// GET /cashout/current
+// ──────────────────────────────────────────────────────────────────────────────
+export const getCurrentDrawer = async (_req, res, next) => {
     try {
-        res.json(await getExpectedTotals());
+        const today = new Date().toISOString().split('T')[0];
+        const { cash_sales, gpay_sales, expenses } = await getDailyFigures(today);
+        const existing = await pool.query(`SELECT * FROM cashouts WHERE cashout_date = $1 ORDER BY id DESC LIMIT 1`, [today]);
+        if (existing.rows.length > 0) {
+            const row = existing.rows[0];
+            const opening_cash = Number(row.opening_cash) || 0;
+            const expected_cash = opening_cash + cash_sales - expenses;
+            const actual_cash = row.actual_cash != null ? Number(row.actual_cash) : null;
+            const actual_gpay = row.actual_gpay != null ? Number(row.actual_gpay) : null;
+            const cash_diff = actual_cash != null ? actual_cash - expected_cash : null;
+            const gpay_diff = actual_gpay != null ? actual_gpay - gpay_sales : null;
+            return res.json({
+                success: true,
+                data: {
+                    id: row.id,
+                    cashout_date: row.cashout_date,
+                    opening_cash,
+                    cash_sales,
+                    gpay_sales,
+                    expenses,
+                    expected_cash,
+                    actual_cash,
+                    actual_gpay,
+                    difference: cash_diff,
+                    gpay_difference: gpay_diff,
+                    notes: row.notes || ''
+                }
+            });
+        }
+        // No record yet — return success:true, data:null per user instruction
+        return res.json({
+            success: true,
+            data: null
+        });
     }
     catch (error) {
         next(error);
     }
 };
-export const listCashouts = async (req, res, next) => {
+// ──────────────────────────────────────────────────────────────────────────────
+// POST /cashout/save — upsert by date (no open/close lifecycle)
+// ──────────────────────────────────────────────────────────────────────────────
+export const saveCashout = async (req, res, next) => {
     try {
-        const { start_date, end_date, date } = req.query;
-        const params = [];
-        const where = [];
-        if (date === 'today') {
-            where.push('c.cashout_date = CURRENT_DATE');
+        const date = req.body.date || new Date().toISOString().split('T')[0];
+        const opening_cash = Number(req.body.opening_cash ?? 0);
+        const actual_cash = Number(req.body.actual_cash ?? 0);
+        const actual_gpay = req.body.actual_gpay != null ? Number(req.body.actual_gpay) : null;
+        const notes = req.body.notes || '';
+        if (isNaN(opening_cash) || opening_cash < 0) {
+            return res.status(400).json({ success: false, message: 'Invalid opening cash amount' });
         }
-        if (start_date) {
-            params.push(start_date);
-            where.push(`c.cashout_date >= $${params.length}`);
+        if (isNaN(actual_cash) || actual_cash < 0) {
+            return res.status(400).json({ success: false, message: 'Invalid actual cash amount' });
         }
-        if (end_date) {
-            params.push(end_date);
-            where.push(`c.cashout_date <= $${params.length}`);
+        const { cash_sales, gpay_sales, expenses } = await getDailyFigures(date);
+        const expected_cash = opening_cash + cash_sales - expenses;
+        const cash_diff = actual_cash - expected_cash;
+        const gpay_diff = actual_gpay != null ? actual_gpay - gpay_sales : null;
+        const existing = await pool.query(`SELECT id FROM cashouts WHERE cashout_date = $1 ORDER BY id DESC LIMIT 1`, [date]);
+        let result;
+        if (existing.rows.length > 0) {
+            result = await pool.query(`
+        UPDATE cashouts
+        SET
+          opening_cash = $1,
+          actual_cash  = $2,
+          actual_gpay  = $3,
+          notes        = $4,
+          difference   = $5,
+          updated_at   = NOW()
+        WHERE id = $6
+        RETURNING *
+      `, [opening_cash, actual_cash, actual_gpay, notes, cash_diff, existing.rows[0].id]);
         }
-        const result = await pool.query(`
-      SELECT
-        c.*,
-        u.name AS submitted_by_name,
-        u.name AS cashier_name,
-        c.expected_gpay AS expected_upi,
-        CASE
-          WHEN c.actual_cash IS NULL THEN NULL
-          ELSE c.actual_cash - c.expected_cash
-        END AS cash_difference
-      FROM cashouts c
-      JOIN users u ON u.id = c.submitted_by
-      ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
-      ORDER BY c.cashout_date DESC, c.created_at DESC
-      LIMIT 90
-    `, params);
-        res.json(result.rows);
+        else {
+            result = await pool.query(`
+        INSERT INTO cashouts
+          (cashout_date, opened_by, opening_cash, actual_cash, actual_gpay, notes, difference, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+        RETURNING *
+      `, [date, req.user?.id, opening_cash, actual_cash, actual_gpay, notes, cash_diff]);
+        }
+        return res.json({
+            success: true,
+            data: {
+                ...result.rows[0],
+                cash_sales,
+                gpay_sales,
+                expenses,
+                expected_cash,
+                difference: cash_diff,
+                gpay_difference: gpay_diff,
+                actual_gpay: actual_gpay
+            }
+        });
     }
     catch (error) {
         next(error);
     }
 };
-export const upsertCashout = async (req, res, next) => {
+// ──────────────────────────────────────────────────────────────────────────────
+// PUT /cashout/:id — edit any historical record
+// ──────────────────────────────────────────────────────────────────────────────
+export const editCashout = async (req, res, next) => {
     try {
-        const { actual_cash, actual_gpay, actual_card, notes } = req.body;
-        const summary = await getExpectedTotals();
+        const { id } = req.params;
+        const existing = await pool.query(`SELECT * FROM cashouts WHERE id = $1`, [id]);
+        if (existing.rows.length === 0) {
+            return res.status(404).json({ success: false, message: 'Record not found' });
+        }
+        const row = existing.rows[0];
+        const date = new Date(row.cashout_date).toISOString().split('T')[0];
+        const opening_cash = req.body.opening_cash !== undefined
+            ? Number(req.body.opening_cash)
+            : Number(row.opening_cash) || 0;
+        const actual_cash = req.body.actual_cash !== undefined
+            ? Number(req.body.actual_cash)
+            : Number(row.actual_cash) || 0;
+        const actual_gpay = req.body.actual_gpay !== undefined
+            ? (req.body.actual_gpay != null ? Number(req.body.actual_gpay) : null)
+            : (row.actual_gpay != null ? Number(row.actual_gpay) : null);
+        const notes = req.body.notes !== undefined ? req.body.notes : (row.notes || '');
+        const { cash_sales, gpay_sales, expenses } = await getDailyFigures(date);
+        const expected_cash = opening_cash + cash_sales - expenses;
+        const cash_diff = actual_cash - expected_cash;
+        const gpay_diff = actual_gpay != null ? actual_gpay - gpay_sales : null;
         const result = await pool.query(`
-      INSERT INTO cashouts
-        (submitted_by, cashout_date, expected_cash, expected_gpay, expected_card, expected_credit,
-         expected_total, actual_cash, actual_gpay, actual_card, notes, closed_at)
-      VALUES ($1, CURRENT_DATE, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
-      ON CONFLICT (cashout_date) DO UPDATE SET
-        submitted_by     = EXCLUDED.submitted_by,
-        expected_cash    = EXCLUDED.expected_cash,
-        expected_gpay    = EXCLUDED.expected_gpay,
-        expected_card    = EXCLUDED.expected_card,
-        expected_credit  = EXCLUDED.expected_credit,
-        expected_total   = EXCLUDED.expected_total,
-        actual_cash      = EXCLUDED.actual_cash,
-        actual_gpay      = EXCLUDED.actual_gpay,
-        actual_card      = EXCLUDED.actual_card,
-        notes            = EXCLUDED.notes,
-        closed_at        = NOW()
+      UPDATE cashouts
+      SET
+        opening_cash = $1,
+        actual_cash  = $2,
+        actual_gpay  = $3,
+        notes        = $4,
+        difference   = $5,
+        updated_at   = NOW()
+      WHERE id = $6
       RETURNING *
-    `, [
-            req.user?.id,
-            summary.expected_cash,
-            summary.expected_gpay,
-            summary.expected_card,
-            summary.expected_credit,
-            summary.expected_total,
-            actual_cash ?? null,
-            actual_gpay ?? null,
-            actual_card ?? null,
-            notes ?? null,
-        ]);
-        await pool.query('INSERT INTO audit_logs (user_id, action, table_name, record_id, new_values) VALUES ($1, $2, $3, $4, $5)', [req.user?.id, 'CASHOUT', 'cashouts', result.rows[0].id, JSON.stringify(result.rows[0])]);
-        res.json(result.rows[0]);
+    `, [opening_cash, actual_cash, actual_gpay, notes, cash_diff, id]);
+        return res.json({
+            success: true,
+            message: 'Cashout updated',
+            data: {
+                ...result.rows[0],
+                cash_sales,
+                gpay_sales,
+                expenses,
+                expected_cash,
+                difference: cash_diff,
+                gpay_difference: gpay_diff,
+                actual_gpay
+            }
+        });
     }
     catch (error) {
         next(error);
     }
 };
+// ──────────────────────────────────────────────────────────────────────────────
+// GET /cashout/history
+// ──────────────────────────────────────────────────────────────────────────────
+export const getCashoutHistory = async (_req, res, next) => {
+    try {
+        const result = await pool.query(`
+      SELECT c.*, u.name AS opened_by_name
+      FROM cashouts c
+      LEFT JOIN users u ON u.id = c.opened_by
+      ORDER BY c.cashout_date DESC
+      LIMIT 90
+    `);
+        const rows = await Promise.all(result.rows.map(async (row) => {
+            try {
+                const date = new Date(row.cashout_date).toISOString().split('T')[0];
+                const { cash_sales, gpay_sales, expenses } = await getDailyFigures(date);
+                const opening_cash = Number(row.opening_cash) || 0;
+                const expected_cash = opening_cash + cash_sales - expenses;
+                const actual_cash = row.actual_cash != null ? Number(row.actual_cash) : null;
+                const actual_gpay = row.actual_gpay != null ? Number(row.actual_gpay) : null;
+                const cash_diff = actual_cash != null ? actual_cash - expected_cash : null;
+                const gpay_diff = actual_gpay != null ? actual_gpay - gpay_sales : null;
+                return {
+                    ...row,
+                    cash_sales,
+                    gpay_sales,
+                    expenses,
+                    expected_cash,
+                    actual_cash,
+                    actual_gpay,
+                    difference: cash_diff,
+                    gpay_difference: gpay_diff,
+                };
+            }
+            catch {
+                return row;
+            }
+        }));
+        return res.json({ success: true, data: rows });
+    }
+    catch (error) {
+        next(error);
+    }
+};
+// Legacy aliases
+export const openDrawer = saveCashout;
+export const closeDrawer = saveCashout;

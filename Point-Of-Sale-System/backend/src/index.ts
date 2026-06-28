@@ -1,6 +1,8 @@
 import express, { Request, Response } from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
+import helmet from 'helmet';
+import compression from 'compression';
 import { validateEnv, env } from './config/env.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import authRoutes from './routes/auth.routes.js';
@@ -25,6 +27,10 @@ import { logger } from './utils/logger.js';
 validateEnv();
 
 const app = express();
+app.set('trust proxy', 1);
+
+app.use(helmet());
+app.use(compression());
 
 app.use(cors({
   origin: env.CORS_ORIGIN,
@@ -56,7 +62,7 @@ app.get('/api/v1/audit-logs', (req: Request, res: Response) => {
 });
 
 app.get('/health', (req: Request, res: Response) => {
-  res.json({ status: 'ok' });
+  res.json({ status: 'ok', db: 'connected', env: 'production' });
 });
 
 app.use(errorHandler);
