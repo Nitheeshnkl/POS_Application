@@ -41,7 +41,7 @@ const MyBills: React.FC = () => {
     { header: 'Customer', accessor: 'customerName' as keyof Bill },
     { 
       header: 'Amount', 
-      accessor: (bill: Bill) => formatCurrency(bill.payableAmount) 
+      accessor: (bill: Bill) => formatCurrency(bill.grandTotal) 
     },
     { 
       header: 'Mode', 
@@ -52,8 +52,8 @@ const MyBills: React.FC = () => {
     {
       header: 'Status',
       accessor: (bill: Bill) => (
-        <Badge variant={bill.status === 'completed' ? 'success' : 'danger'}>
-          {bill.status}
+        <Badge variant={bill.paymentStatus === 'paid' ? 'success' : 'danger'}>
+          {bill.paymentStatus}
         </Badge>
       )
     },
@@ -109,7 +109,7 @@ const MyBills: React.FC = () => {
               </div>
               <div>
                 <div className="text-gray-500">Status</div>
-                <div className="capitalize">{selectedBill.status}</div>
+                <div className="capitalize">{selectedBill.paymentStatus}</div>
               </div>
             </div>
 
@@ -135,11 +135,11 @@ const MyBills: React.FC = () => {
             <div className="space-y-1 text-right">
               <div className="flex justify-between">
                 <span>Total Amount</span>
-                <span>{formatCurrency(selectedBill.totalAmount)}</span>
+                <span>{formatCurrency(selectedBill.subtotal)}</span>
               </div>
               <div className="flex justify-between font-bold text-lg border-t pt-1">
                 <span>Payable</span>
-                <span>{formatCurrency(selectedBill.payableAmount)}</span>
+                <span>{formatCurrency(selectedBill.grandTotal)}</span>
               </div>
             </div>
 

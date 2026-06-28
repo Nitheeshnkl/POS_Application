@@ -1,31 +1,25 @@
-"use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.getMonthlySales = exports.getDailySales = exports.getTopProducts = exports.getCashierPerformance = exports.getGstReport = exports.getProfitLossReport = exports.getPurchasesReport = exports.getStockReport = exports.getSalesReport = exports.getDashboardMetrics = void 0;
-const db_js_1 = __importDefault(require("../config/db.js"));
-const getDashboardMetrics = async (req, res, next) => {
+import pool from '../config/db.js';
+export const getDashboardMetrics = async (req, res, next) => {
     try {
-        const todaySalesResult = await db_js_1.default.query("SELECT COALESCE(SUM(grand_total), 0) as total, COUNT(*) as count FROM bills WHERE DATE(created_at) = CURRENT_DATE AND payment_status != 'cancelled'");
-        const todayItemsResult = await db_js_1.default.query("SELECT COALESCE(SUM(quantity), 0) as total FROM bill_items bi JOIN bills b ON bi.bill_id = b.id WHERE DATE(b.created_at) = CURRENT_DATE AND b.payment_status != 'cancelled'");
-        const todayExpensesResult = await db_js_1.default.query("SELECT COALESCE(SUM(amount), 0) as total FROM expenses WHERE DATE(created_at) = CURRENT_DATE");
-        const todayCogsResult = await db_js_1.default.query(`
+        const todaySalesResult = await pool.query("SELECT COALESCE(SUM(grand_total), 0) as total, COUNT(*) as count FROM bills WHERE DATE(created_at) = CURRENT_DATE AND payment_status != 'cancelled'");
+        const todayItemsResult = await pool.query("SELECT COALESCE(SUM(quantity), 0) as total FROM bill_items bi JOIN bills b ON bi.bill_id = b.id WHERE DATE(b.created_at) = CURRENT_DATE AND b.payment_status != 'cancelled'");
+        const todayExpensesResult = await pool.query("SELECT COALESCE(SUM(amount), 0) as total FROM expenses WHERE DATE(created_at) = CURRENT_DATE");
+        const todayCogsResult = await pool.query(`
       SELECT COALESCE(SUM(bi.quantity * p.purchase_price), 0) as total
       FROM bill_items bi
       JOIN bills b ON bi.bill_id = b.id
       JOIN products p ON bi.product_id = p.id
       WHERE DATE(b.created_at) = CURRENT_DATE AND b.payment_status != 'cancelled'
     `);
-        const paymentModesResult = await db_js_1.default.query(`
+        const paymentModesResult = await pool.query(`
       SELECT payment_mode, SUM(grand_total) as total
       FROM bills
       WHERE DATE(created_at) = CURRENT_DATE AND payment_status = 'paid'
       GROUP BY payment_mode
     `);
-        const monthSalesResult = await db_js_1.default.query("SELECT COALESCE(SUM(grand_total), 0) as total FROM bills WHERE DATE_TRUNC('month', created_at) = DATE_TRUNC('month', CURRENT_DATE) AND payment_status != 'cancelled'");
-        const monthPurchasesResult = await db_js_1.default.query("SELECT COALESCE(SUM(total_amount), 0) as total FROM purchases WHERE DATE_TRUNC('month', created_at) = DATE_TRUNC('month', CURRENT_DATE)");
-        const monthExpensesResult = await db_js_1.default.query("SELECT COALESCE(SUM(amount), 0) as total FROM expenses WHERE DATE_TRUNC('month', created_at) = DATE_TRUNC('month', CURRENT_DATE)");
+        const monthSalesResult = await pool.query("SELECT COALESCE(SUM(grand_total), 0) as total FROM bills WHERE DATE_TRUNC('month', created_at) = DATE_TRUNC('month', CURRENT_DATE) AND payment_status != 'cancelled'");
+        const monthPurchasesResult = await pool.query("SELECT COALESCE(SUM(total_amount), 0) as total FROM purchases WHERE DATE_TRUNC('month', created_at) = DATE_TRUNC('month', CURRENT_DATE)");
+        const monthExpensesResult = await pool.query("SELECT COALESCE(SUM(amount), 0) as total FROM expenses WHERE DATE_TRUNC('month', created_at) = DATE_TRUNC('month', CURRENT_DATE)");
         const todaySales = Number(todaySalesResult.rows[0].total);
         const todayCogs = Number(todayCogsResult.rows[0].total);
         const todayExpenses = Number(todayExpensesResult.rows[0].total);
@@ -49,8 +43,7 @@ const getDashboardMetrics = async (req, res, next) => {
         next(error);
     }
 };
-exports.getDashboardMetrics = getDashboardMetrics;
-const getSalesReport = async (req, res, next) => {
+export const getSalesReport = async (req, res, next) => {
     try {
         const { start_date, end_date, cashier_id, payment_mode } = req.query;
         let query = "SELECT b.*, u.name as cashier_name FROM bills b LEFT JOIN users u ON b.cashier_id = u.id WHERE b.payment_status != 'cancelled'";
@@ -72,17 +65,16 @@ const getSalesReport = async (req, res, next) => {
             params.push(payment_mode);
         }
         query += ' ORDER BY b.created_at DESC';
-        const result = await db_js_1.default.query(query, params);
+        const result = await pool.query(query, params);
         res.json(result.rows);
     }
     catch (error) {
         next(error);
     }
 };
-exports.getSalesReport = getSalesReport;
-const getStockReport = async (req, res, next) => {
+export const getStockReport = async (req, res, next) => {
     try {
-        const result = await db_js_1.default.query(`
+        const result = await pool.query(`
       SELECT 
         p.id, p.name_en, p.name_ta, p.current_stock, p.unit_type, p.purchase_price, 
         (p.current_stock * p.purchase_price) as valuation,
@@ -98,8 +90,7 @@ const getStockReport = async (req, res, next) => {
         next(error);
     }
 };
-exports.getStockReport = getStockReport;
-const getPurchasesReport = async (req, res, next) => {
+export const getPurchasesReport = async (req, res, next) => {
     try {
         const { start_date, end_date } = req.query;
         let query = 'SELECT * FROM purchases WHERE 1=1';
@@ -113,21 +104,20 @@ const getPurchasesReport = async (req, res, next) => {
             params.push(end_date);
         }
         query += ' ORDER BY created_at DESC';
-        const result = await db_js_1.default.query(query, params);
+        const result = await pool.query(query, params);
         res.json(result.rows);
     }
     catch (error) {
         next(error);
     }
 };
-exports.getPurchasesReport = getPurchasesReport;
-const getProfitLossReport = async (req, res, next) => {
+export const getProfitLossReport = async (req, res, next) => {
     try {
         const { month, year } = req.query;
         const dateStr = `${year}-${month}-01`;
-        const revenueResult = await db_js_1.default.query("SELECT COALESCE(SUM(grand_total), 0) as total FROM bills WHERE DATE_TRUNC('month', created_at) = $1 AND payment_status != 'cancelled'", [dateStr]);
-        const expensesResult = await db_js_1.default.query("SELECT COALESCE(SUM(amount), 0) as total FROM expenses WHERE DATE_TRUNC('month', created_at) = $1", [dateStr]);
-        const cogsResult = await db_js_1.default.query(`SELECT COALESCE(SUM(bi.quantity * p.purchase_price), 0) as total
+        const revenueResult = await pool.query("SELECT COALESCE(SUM(grand_total), 0) as total FROM bills WHERE DATE_TRUNC('month', created_at) = $1 AND payment_status != 'cancelled'", [dateStr]);
+        const expensesResult = await pool.query("SELECT COALESCE(SUM(amount), 0) as total FROM expenses WHERE DATE_TRUNC('month', created_at) = $1", [dateStr]);
+        const cogsResult = await pool.query(`SELECT COALESCE(SUM(bi.quantity * p.purchase_price), 0) as total
        FROM bill_items bi
        JOIN bills b ON bi.bill_id = b.id
        JOIN products p ON bi.product_id = p.id
@@ -143,12 +133,11 @@ const getProfitLossReport = async (req, res, next) => {
         next(error);
     }
 };
-exports.getProfitLossReport = getProfitLossReport;
-const getGstReport = async (req, res, next) => {
+export const getGstReport = async (req, res, next) => {
     try {
         const { month, year } = req.query;
         const dateStr = `${year}-${month}-01`;
-        const result = await db_js_1.default.query(`SELECT 
+        const result = await pool.query(`SELECT 
         gst_rate,
         SUM(line_total / (1 + gst_rate/100) * (gst_rate/100)) as total_gst,
         SUM(line_total / (1 + gst_rate/100)) as taxable_amount
@@ -162,8 +151,7 @@ const getGstReport = async (req, res, next) => {
         next(error);
     }
 };
-exports.getGstReport = getGstReport;
-const getCashierPerformance = async (req, res, next) => {
+export const getCashierPerformance = async (req, res, next) => {
     try {
         const { start_date, end_date } = req.query;
         let query = `
@@ -185,19 +173,18 @@ const getCashierPerformance = async (req, res, next) => {
             params.push(end_date);
         }
         query += ' GROUP BY u.id, u.name ORDER BY total_sales DESC';
-        const result = await db_js_1.default.query(query, params);
+        const result = await pool.query(query, params);
         res.json(result.rows);
     }
     catch (error) {
         next(error);
     }
 };
-exports.getCashierPerformance = getCashierPerformance;
-const getTopProducts = async (req, res, next) => {
+export const getTopProducts = async (req, res, next) => {
     try {
         const limit = Math.min(parseInt(req.query.limit) || 10, 50);
         const days = parseInt(req.query.days) || 30;
-        const result = await db_js_1.default.query(`
+        const result = await pool.query(`
       SELECT
         p.id, p.name_en, p.name_ta, p.current_stock, p.min_stock_alert,
         SUM(bi.quantity)                 AS total_qty_sold,
@@ -218,11 +205,10 @@ const getTopProducts = async (req, res, next) => {
         next(error);
     }
 };
-exports.getTopProducts = getTopProducts;
-const getDailySales = async (req, res, next) => {
+export const getDailySales = async (req, res, next) => {
     try {
         const { days = 30 } = req.query;
-        const result = await db_js_1.default.query(`SELECT 
+        const result = await pool.query(`SELECT 
         DATE(created_at) as date,
         SUM(grand_total) as total
        FROM bills
@@ -235,11 +221,10 @@ const getDailySales = async (req, res, next) => {
         next(error);
     }
 };
-exports.getDailySales = getDailySales;
-const getMonthlySales = async (req, res, next) => {
+export const getMonthlySales = async (req, res, next) => {
     try {
         const { months = 12 } = req.query;
-        const result = await db_js_1.default.query(`SELECT 
+        const result = await pool.query(`SELECT 
         TO_CHAR(created_at, 'YYYY-MM') as month,
         SUM(grand_total) as total
        FROM bills
@@ -252,4 +237,3 @@ const getMonthlySales = async (req, res, next) => {
         next(error);
     }
 };
-exports.getMonthlySales = getMonthlySales;

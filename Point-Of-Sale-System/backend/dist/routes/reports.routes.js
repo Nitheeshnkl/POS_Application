@@ -1,45 +1,10 @@
-"use strict";
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
-Object.defineProperty(exports, "__esModule", { value: true });
-const express_1 = require("express");
-const reportsController = __importStar(require("../controllers/reports.controller.js"));
-const auth_js_1 = require("../middleware/auth.js");
-const roleGuard_js_1 = require("../middleware/roleGuard.js");
-const router = (0, express_1.Router)();
-router.use(auth_js_1.authenticate);
-router.use((0, roleGuard_js_1.roleGuard)(['owner']));
+import { Router } from 'express';
+import * as reportsController from '../controllers/reports.controller.js';
+import { authenticate } from '../middleware/auth.js';
+import { roleGuard } from '../middleware/roleGuard.js';
+const router = Router();
+router.use(authenticate);
+router.use(roleGuard(['owner']));
 router.get('/dashboard', reportsController.getDashboardMetrics);
 router.get('/sales', reportsController.getSalesReport);
 router.get('/stock', reportsController.getStockReport);
@@ -50,4 +15,4 @@ router.get('/cashier-performance', reportsController.getCashierPerformance);
 router.get('/top-products', reportsController.getTopProducts);
 router.get('/daily-sales', reportsController.getDailySales);
 router.get('/monthly-sales', reportsController.getMonthlySales);
-exports.default = router;
+export default router;

@@ -10,8 +10,11 @@ import { Badge } from '../../components/ui/Badge';
 import { Plus, Edit2, Trash2, Search } from 'lucide-react';
 import { Product } from '../../types';
 import { formatCurrency } from '../../utils/formatCurrency';
+import { useLanguage } from '../../i18n/LanguageContext';
+import { LanguageToggle } from '../../components/ui/LanguageToggle';
 
 const Products: React.FC = () => {
+  const { language, t } = useLanguage();
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -124,8 +127,8 @@ const Products: React.FC = () => {
       ),
     },
     {
-      header: 'Category',
-      accessor: (p: Product) => p.category?.nameEn || 'N/A',
+      header: t('categories'),
+      accessor: (p: Product) => (language === 'TA' ? p.category?.nameTa || p.category?.nameEn : p.category?.nameEn) || 'N/A',
     },
     { header: 'Unit', accessor: 'unitType' as const },
     {
@@ -170,8 +173,8 @@ const Products: React.FC = () => {
   return (
     <div className="p-6">
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-slate-900">Products</h1>
-        <div className="flex space-x-4">
+        <h1 className="text-2xl font-bold text-slate-900">{t('products')}</h1>
+        <div className="flex items-center space-x-4">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
             <input
@@ -186,6 +189,7 @@ const Products: React.FC = () => {
             <Plus size={20} className="mr-2" />
             Add Product
           </Button>
+          <LanguageToggle />
         </div>
       </div>
 
@@ -207,37 +211,39 @@ const Products: React.FC = () => {
               Cancel
             </Button>
             <Button onClick={handleSubmit} isLoading={createMutation.isPending || updateMutation.isPending}>
-              {editingProduct ? 'Update' : 'Save'}
+              {editingProduct ? t('update') : t('save')}
             </Button>
           </div>
         }
       >
-        <form onSubmit={handleSubmit} className="grid grid-cols-2 gap-4">
-          <Input
-            label="Name (English)"
-            value={formData.nameEn}
-            onChange={(e) => setFormData({ ...formData, nameEn: e.target.value })}
-            required
-          />
-          <Input
-            label="Name (Tamil)"
-            value={formData.nameTa}
-            onChange={(e) => setFormData({ ...formData, nameTa: e.target.value })}
-            required
-          />
-          <div className="w-full">
-            <label className="block text-sm font-medium text-slate-700 mb-1">Category</label>
-            <select
-              className="block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
-              value={formData.categoryId}
-              onChange={(e) => setFormData({ ...formData, categoryId: e.target.value })}
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <Input
+              label={t('nameEnglish')}
+              value={formData.nameEn}
+              onChange={(e) => setFormData({ ...formData, nameEn: e.target.value })}
               required
-            >
-              <option value="">Select Category</option>
-              {categories.map((c) => (
-                <option key={c.id} value={c.id}>{c.nameEn}</option>
-              ))}
-            </select>
+            />
+            <Input
+              label={t('nameTamil')}
+              value={formData.nameTa}
+              onChange={(e) => setFormData({ ...formData, nameTa: e.target.value })}
+            />
+            <div className="col-span-2 sm:col-span-1">
+              <label className="block text-sm font-medium mb-1">{t('categories')}</label>
+              <select
+                className="w-full border border-slate-300 rounded-md p-2"
+                value={formData.categoryId}
+                onChange={(e) => setFormData({ ...formData, categoryId: e.target.value })}
+              >
+                <option value="">Select Category</option>
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {language === 'TA' ? c.nameTa || c.nameEn : c.nameEn}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
           <div className="w-full">
             <label className="block text-sm font-medium text-slate-700 mb-1">Unit Type</label>

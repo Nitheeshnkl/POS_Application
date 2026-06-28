@@ -53,6 +53,7 @@ export const getDashboardMetrics = async (req: Request, res: Response, next: Nex
         sales: Number(monthSalesResult.rows[0].total),
         purchases: Number(monthPurchasesResult.rows[0].total),
         expenses: Number(monthExpensesResult.rows[0].total),
+        profit: Number(monthSalesResult.rows[0].total) - Number(monthPurchasesResult.rows[0].total) - Number(monthExpensesResult.rows[0].total),
       },
     });
   } catch (error) {

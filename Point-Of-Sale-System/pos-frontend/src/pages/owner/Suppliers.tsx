@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast, { Toaster } from 'react-hot-toast';
-import { getSuppliers, createSupplier, updateSupplier, getSupplierPurchases } from '../../api/suppliers';
+import { getSuppliers, createSupplier, updateSupplier, getSupplierPurchases, getSupplierTransactions} from '../../api/suppliers';
 import { Supplier } from '../../types';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
@@ -24,6 +24,13 @@ const Suppliers: React.FC = () => {
     queryFn: getSuppliers,
   });
 
+  const { data: transactions, isLoading: transactionsLoading } = useQuery({
+    queryKey: ['supplier-transactions', selectedSupplier?.id],
+    queryFn: () => getSupplierTransactions(selectedSupplier!.id),
+    enabled: !!selectedSupplier,
+  });
+
+  // @ts-ignore
   const { data: purchases, isLoading: purchasesLoading } = useQuery({
     queryKey: ['supplier-purchases', selectedSupplier?.id],
     queryFn: () => getSupplierPurchases(selectedSupplier!.id),
@@ -74,6 +81,38 @@ const Suppliers: React.FC = () => {
   const f = (key: keyof typeof emptyForm) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     setForm(prev => ({ ...prev, [key]: e.target.value }));
 
+  const columns = useMemo(() => [
+    { header: 'Name', accessor: 'name' as const },
+    { header: 'Balance', accessor: (v: any) => <span className={v.balance > 0 ? 'text-red-600 font-bold' : ''}>{formatCurrency(v.balance || 0)}</span> },
+    { header: 'Phone', accessor: (v: any) => v.phone || '—' },
+    { header: 'Email', accessor: (v: any) => v.email || '—' },
+    { header: 'GSTIN', accessor: (v: any) => v.gstin || '—' },
+    {
+      header: 'Actions',
+      accessor: (v: any) => (
+        <div className="flex gap-2">
+          <button className="text-blue-600 hover:underline text-sm" onClick={() => handleEdit(v)}>Edit</button>
+          <button className="text-slate-600 hover:underline text-sm" onClick={() => setSelectedSupplier(v)}>History</button>
+        </div>
+      ),
+    },
+  ], []);
+
+  const transactionColumns = useMemo(() => [
+    { header: 'Date', accessor: (v: any) => formatDate(v.created_at) },
+    { header: 'Type', accessor: (v: any) => <span className="capitalize">{v.type}</span> },
+    { header: 'Amount', accessor: (v: any) => formatCurrency(v.amount) },
+    { header: 'Notes', accessor: 'notes' as const },
+  ], []);
+
+  // @ts-ignore
+  const purchaseColumns = useMemo(() => [
+    { header: 'Date', accessor: (v: any) => formatDate(v.purchaseDate) },
+    { header: 'Invoice', accessor: (v: any) => v.invoiceNumber || '—' },
+    { header: 'Total', accessor: (v: any) => formatCurrency(v.totalAmount) },
+    { header: 'Payment', accessor: 'paymentMode' as const },
+  ], []);
+
   return (
     <>
       <Toaster position="top-right" />
@@ -84,31 +123,7 @@ const Suppliers: React.FC = () => {
         </div>
 
         <Table
-          columns={[
-            { header: 'Name', accessor: 'name' },
-            { header: 'Phone', accessor: (v: any) => v.phone || '—' },
-            { header: 'Email', accessor: (v: any) => v.email || '—' },
-            { header: 'GSTIN', accessor: (v: any) => v.gstin || '—' },
-            {
-              header: 'Actions',
-              accessor: (v: any) => (
-                <div className="flex gap-2">
-                  <button
-                    className="text-blue-600 hover:underline text-sm"
-                    onClick={() => handleEdit(v)}
-                  >
-                    Edit
-                  </button>
-                  <button
-                    className="text-green-600 hover:underline text-sm"
-                    onClick={() => setSelectedSupplier(v)}
-                  >
-                    Purchases
-                  </button>
-                </div>
-              ),
-            },
-          ]}
+          columns={columns}
           data={suppliers || []}
           isLoading={isLoading}
           keyExtractor={(v: any) => v.id}
@@ -144,21 +159,19 @@ const Suppliers: React.FC = () => {
           </form>
         </Modal>
 
-        {/* Purchase History Modal */}
+        {/* Transactions / History Modal */}
         <Modal
           isOpen={!!selectedSupplier}
           onClose={() => setSelectedSupplier(null)}
-          title={`Purchases — ${selectedSupplier?.name}`}
+          title={`History — ${selectedSupplier?.name}`}
         >
+          <div className="flex justify-between items-center mb-4">
+            <div className="text-sm font-medium">Outstanding Balance: {formatCurrency(selectedSupplier?.balance || 0)}</div>
+          </div>
           <Table
-            columns={[
-              { header: 'Date', accessor: (v: any) => formatDate(v.purchaseDate) },
-              { header: 'Invoice', accessor: (v: any) => v.invoiceNumber || '—' },
-              { header: 'Total', accessor: (v: any) => formatCurrency(v.totalAmount) },
-              { header: 'Payment', accessor: 'paymentMode' },
-            ]}
-            data={purchases || []}
-            isLoading={purchasesLoading}
+            columns={transactionColumns}
+            data={transactions || []}
+            isLoading={transactionsLoading}
             keyExtractor={(v: any) => v.id}
           />
         </Modal>

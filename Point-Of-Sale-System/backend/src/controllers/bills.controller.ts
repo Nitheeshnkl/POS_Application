@@ -23,7 +23,7 @@ export const getBills = async (req: Request, res: Response, next: NextFunction) 
 
     if (end_date) {
       query += ' AND created_at <= $' + (params.length + 1);
-      params.push(end_date);
+      params.push(`${end_date} 23:59:59`);
     }
 
     if (payment_mode) {
@@ -46,6 +46,7 @@ export const createBill = async (req: Request, res: Response, next: NextFunction
     await client.query('BEGIN');
 
     const {
+      customer_id,
       customer_name,
       customer_phone,
       items,
@@ -53,8 +54,10 @@ export const createBill = async (req: Request, res: Response, next: NextFunction
       discount_total = 0,
       cash_given = null,
       change_returned = null,
+      override_credit = false,
     } = req.body;
     const cashier_id = req.user?.id;
+    const user_role = req.user?.role;
 
     const bill_number = await generateBillNumber();
 
@@ -90,41 +93,92 @@ export const createBill = async (req: Request, res: Response, next: NextFunction
 
     const grand_total = subtotal + gst_total - Number(discount_total);
 
+    // Credit Logic
+    let credit_due = 0;
+    let credit_status = 'paid';
+    
+    if (payment_mode === 'credit') {
+      if (!customer_id) {
+        throw new Error('Customer must be selected for credit bills');
+      }
+
+      // Check Customer Credit Limit
+      const custRes = await client.query('SELECT credit_limit, credit_used FROM customers WHERE id = $1', [customer_id]);
+      if (custRes.rows.length === 0) throw new Error('Customer not found');
+      
+      const { credit_limit: cLimit, credit_used: cUsed } = custRes.rows[0];
+      if (Number(cUsed) + grand_total > Number(cLimit) && !override_credit) {
+        return res.status(400).json({ message: 'Customer credit limit exceeded' });
+      }
+
+      // Check Cashier Credit Limit (if not owner)
+      if (user_role === 'cashier') {
+        const cashRes = await client.query('SELECT credit_limit, credit_used FROM users WHERE id = $1', [cashier_id]);
+        if (cashRes.rows.length > 0) {
+          const { credit_limit: uLimit, credit_used: uUsed } = cashRes.rows[0];
+          if (Number(uUsed) + grand_total > Number(uLimit) && !override_credit) {
+            return res.status(400).json({ message: 'Cashier credit limit exceeded' });
+          }
+          // Update cashier credit used
+          await client.query('UPDATE users SET credit_used = credit_used + $1 WHERE id = $2', [grand_total, cashier_id]);
+        }
+      }
+
+      credit_due = grand_total;
+      credit_status = 'pending';
+      
+      // Update customer credit used
+      await client.query('UPDATE customers SET credit_used = credit_used + $1 WHERE id = $2', [grand_total, customer_id]);
+      
+      // Notify
+      await client.query(
+        `INSERT INTO notifications (title, message, target_role) VALUES ($1, $2, 'owner') ON CONFLICT DO NOTHING`,
+        [`Credit Bill Created`, `Bill #${bill_number} for ₹${grand_total}`]
+      );
+    }
+
     const billResult = await client.query(
-      'INSERT INTO bills (bill_number, customer_name, customer_phone, subtotal, gst_total, discount_total, grand_total, payment_mode, cashier_id, cash_given, change_returned) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *',
-      [bill_number, customer_name, customer_phone, subtotal, gst_total, discount_total, grand_total, payment_mode, cashier_id, cash_given, change_returned]
+      'INSERT INTO bills (bill_number, customer_id, customer_name, customer_phone, subtotal, gst_total, discount_total, grand_total, payment_mode, cashier_id, cash_given, change_returned, credit_due, credit_status) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) RETURNING *',
+      [bill_number, customer_id || null, customer_name, customer_phone, subtotal, gst_total, discount_total, grand_total, payment_mode, cashier_id, cash_given, change_returned, credit_due, credit_status]
     );
 
     const bill = billResult.rows[0];
 
     for (const item of items) {
+      const isCustom = item.product_id === 'CUSTOM' || !item.product_id;
+      const dbProductId = isCustom ? null : item.product_id;
+      
       await client.query(
         'INSERT INTO bill_items (bill_id, product_id, product_name_en, quantity, unit_price, gst_rate, line_total) VALUES ($1, $2, $3, $4, $5, $6, $7)',
-        [bill.id, item.product_id, item.name_en, item.quantity, item.unit_price, item.gst_rate, item.line_total]
+        [bill.id, dbProductId, item.name_en, item.quantity, item.unit_price, item.gst_rate, item.line_total]
       );
 
-      const stockUpdateResult = await client.query(
-        'UPDATE products SET current_stock = current_stock - $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING current_stock',
-        [item.quantity, item.product_id]
-      );
-      const new_stock = Number(stockUpdateResult.rows[0].current_stock);
-      const previous_stock = new_stock + Number(item.quantity);
-
-      await client.query(
-        'INSERT INTO stock_movements (product_id, type, quantity, previous_stock, new_stock, reason, performed_by) VALUES ($1, $2, $3, $4, $5, $6, $7)',
-        [item.product_id, 'sale', item.quantity, previous_stock, new_stock, `Sale - Bill #${bill_number}`, cashier_id]
-      );
-
-      if (new_stock <= Number(item.min_stock_alert)) {
-        await client.query(
-          `INSERT INTO notifications (title, message, target_role)
-           VALUES ($1, $2, 'owner')
-           ON CONFLICT DO NOTHING`,
-          [
-            `Low Stock: ${item.name_en}`,
-            `Stock is ${new_stock} (threshold: ${item.min_stock_alert})`
-          ]
+      if (dbProductId) {
+        const stockUpdateResult = await client.query(
+          'UPDATE products SET current_stock = current_stock - $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING current_stock',
+          [item.quantity, dbProductId]
         );
+        if (stockUpdateResult.rowCount && stockUpdateResult.rowCount > 0) {
+          const new_stock = Number(stockUpdateResult.rows[0].current_stock);
+          const previous_stock = new_stock + Number(item.quantity);
+
+          await client.query(
+            'INSERT INTO stock_movements (product_id, type, quantity, previous_stock, new_stock, reason, performed_by) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+            [dbProductId, 'sale', item.quantity, previous_stock, new_stock, `Sale - Bill #${bill_number}`, cashier_id]
+          );
+
+          if (new_stock <= Number(item.min_stock_alert)) {
+            await client.query(
+              `INSERT INTO notifications (title, message, target_role)
+               VALUES ($1, $2, 'owner')
+               ON CONFLICT DO NOTHING`,
+              [
+                `Low Stock: ${item.name_en}`,
+                `Stock is ${new_stock} (threshold: ${item.min_stock_alert})`
+              ]
+            );
+          }
+        }
       }
     }
 
@@ -177,7 +231,10 @@ export const cancelBill = async (req: Request, res: Response, next: NextFunction
       return res.status(400).json({ message: 'Bill already cancelled' });
     }
 
-    await client.query("UPDATE bills SET payment_status = 'cancelled' WHERE id = $1", [id]);
+    const cancelledResult = await client.query(
+      "UPDATE bills SET payment_status = 'cancelled' WHERE id = $1 RETURNING *",
+      [id]
+    );
 
     const itemsResult = await client.query('SELECT * FROM bill_items WHERE bill_id = $1', [id]);
     for (const item of itemsResult.rows) {
@@ -200,7 +257,7 @@ export const cancelBill = async (req: Request, res: Response, next: NextFunction
     );
 
     await client.query('COMMIT');
-    res.json({ message: 'Bill cancelled and stock restored' });
+    res.json(cancelledResult.rows[0]);
   } catch (error) {
     await client.query('ROLLBACK');
     next(error);

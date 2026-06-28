@@ -1,13 +1,7 @@
-"use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.getStockValuation = exports.markDamaged = exports.adjustStock = exports.getStockMovements = exports.getLowStockAlerts = exports.getCurrentStock = void 0;
-const db_js_1 = __importDefault(require("../config/db.js"));
-const getCurrentStock = async (req, res, next) => {
+import pool from '../config/db.js';
+export const getCurrentStock = async (req, res, next) => {
     try {
-        const result = await db_js_1.default.query(`
+        const result = await pool.query(`
       SELECT p.id, p.name_en, p.name_ta, p.unit_type, p.current_stock, p.purchase_price,
              (p.current_stock * p.purchase_price) as stock_value,
              c.name_en as category_name
@@ -22,10 +16,9 @@ const getCurrentStock = async (req, res, next) => {
         next(error);
     }
 };
-exports.getCurrentStock = getCurrentStock;
-const getLowStockAlerts = async (req, res, next) => {
+export const getLowStockAlerts = async (req, res, next) => {
     try {
-        const result = await db_js_1.default.query(`
+        const result = await pool.query(`
       SELECT id, name_en, name_ta, current_stock, min_stock_alert, unit_type
       FROM products
       WHERE is_active = true AND current_stock <= min_stock_alert
@@ -37,8 +30,7 @@ const getLowStockAlerts = async (req, res, next) => {
         next(error);
     }
 };
-exports.getLowStockAlerts = getLowStockAlerts;
-const getStockMovements = async (req, res, next) => {
+export const getStockMovements = async (req, res, next) => {
     const { product_id, page = 1, limit = 20 } = req.query;
     const offset = (Number(page) - 1) * Number(limit);
     let query = `
@@ -56,8 +48,8 @@ const getStockMovements = async (req, res, next) => {
     query += ` ORDER BY sm.created_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
     params.push(limit, offset);
     try {
-        const result = await db_js_1.default.query(query, params);
-        const countResult = await db_js_1.default.query('SELECT COUNT(*) FROM stock_movements' + (product_id ? ' WHERE product_id = $1' : ''), product_id ? [product_id] : []);
+        const result = await pool.query(query, params);
+        const countResult = await pool.query('SELECT COUNT(*) FROM stock_movements' + (product_id ? ' WHERE product_id = $1' : ''), product_id ? [product_id] : []);
         res.json({
             data: result.rows,
             pagination: {
@@ -71,10 +63,9 @@ const getStockMovements = async (req, res, next) => {
         next(error);
     }
 };
-exports.getStockMovements = getStockMovements;
-const adjustStock = async (req, res, next) => {
+export const adjustStock = async (req, res, next) => {
     const { product_id, quantity, type, reason } = req.body;
-    const client = await db_js_1.default.connect();
+    const client = await pool.connect();
     try {
         await client.query('BEGIN');
         const productRes = await client.query('SELECT current_stock FROM products WHERE id = $1 FOR UPDATE', [product_id]);
@@ -110,15 +101,13 @@ const adjustStock = async (req, res, next) => {
         client.release();
     }
 };
-exports.adjustStock = adjustStock;
-const markDamaged = async (req, res, next) => {
+export const markDamaged = async (req, res, next) => {
     req.body.type = 'damage';
-    return (0, exports.adjustStock)(req, res, next);
+    return adjustStock(req, res, next);
 };
-exports.markDamaged = markDamaged;
-const getStockValuation = async (req, res, next) => {
+export const getStockValuation = async (req, res, next) => {
     try {
-        const result = await db_js_1.default.query(`
+        const result = await pool.query(`
       SELECT 
         SUM(current_stock * purchase_price) as total_value,
         COUNT(*) as product_count
@@ -131,4 +120,3 @@ const getStockValuation = async (req, res, next) => {
         next(error);
     }
 };
-exports.getStockValuation = getStockValuation;

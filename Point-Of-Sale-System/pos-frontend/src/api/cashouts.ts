@@ -1,41 +1,47 @@
 import api from './client';
-import { Cashout } from '../types';
 
-export interface TodaySummary {
-  cash: number;
-  upi: number;
-  card: number;
-  credit: number;
-  total: number;
-  billCount: number;
-  cashoutDone: boolean;
-  cashoutClosedAt?: string;
+export interface CashoutRecord {
+  id: number | null;
+  cashout_date: string;
+  opening_cash: number;
+  cash_sales: number;
+  gpay_sales: number;
+  expenses: number;
+  expected_cash: number;
+  actual_cash: number | null;
+  actual_gpay: number | null;
+  difference: number | null;
+  gpay_difference: number | null;
+  notes: string;
+  opened_by_name?: string;
 }
 
-export const getTodaySummary = async (): Promise<TodaySummary> => {
-  const response = await api.get('/cashouts/today-summary');
-  return response.data;
+export const getCurrentDrawer = async (): Promise<CashoutRecord> => {
+  const res = await api.get('/cashout/current');
+  return res.data.data;
 };
 
-export const createCashout = async (data: {
-  actual_cash?: number;
-  denomination_breakdown?: Record<string, number>;
+export const saveCashout = async (data: {
+  opening_cash: number;
+  actual_cash: number;
+  actual_gpay?: number | null;
   notes?: string;
-}): Promise<Cashout> => {
-  const response = await api.post('/cashouts', data);
-  return response.data;
+  date?: string;
+}): Promise<CashoutRecord> => {
+  const res = await api.post('/cashout/save', data);
+  return res.data.data;
 };
 
-export const getCashouts = async (params?: {
-  start_date?: string;
-  end_date?: string;
-  cashier_id?: string;
-}): Promise<Cashout[]> => {
-  const response = await api.get('/cashouts', { params });
-  return response.data;
+
+export const editCashout = async (
+  id: number,
+  data: { opening_cash?: number; actual_cash?: number; notes?: string }
+): Promise<CashoutRecord> => {
+  const res = await api.put(`/cashout/${id}`, data);
+  return res.data.data;
 };
 
-export const getCashoutById = async (id: string): Promise<Cashout> => {
-  const response = await api.get(`/cashouts/${id}`);
-  return response.data;
+export const getCashoutHistory = async (): Promise<CashoutRecord[]> => {
+  const res = await api.get('/cashout/history');
+  return Array.isArray(res.data.data) ? res.data.data : [];
 };

@@ -3,17 +3,26 @@ import camelcaseKeys from 'camelcase-keys';
 import { useAuthStore } from '../store/authStore';
 
 const apiClient = axios.create({
-  baseURL: '/api/v1',
+  baseURL: import.meta.env.VITE_API_URL || '/api/v1',
   headers: {
     'Content-Type': 'application/json',
   },
   withCredentials: true,
 });
 
+import snakecaseKeys from 'snakecase-keys';
+
 apiClient.interceptors.request.use((config) => {
   const { accessToken } = useAuthStore.getState();
   if (accessToken) {
     config.headers.Authorization = `Bearer ${accessToken}`;
+  }
+  if (config.data && typeof config.data === 'object' && !(config.data instanceof FormData)) {
+    config.data = snakecaseKeys(config.data, { deep: true });
+  }
+  // Also convert params
+  if (config.params && typeof config.params === 'object') {
+    config.params = snakecaseKeys(config.params, { deep: true });
   }
   return config;
 });

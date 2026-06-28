@@ -3,13 +3,13 @@ import { BillItem } from '../types';
 
 interface BillState {
   items: BillItem[];
-  customer: { name: string; phone: string; isCredit: boolean } | null;
+  customer: { id?: string; name: string; phone: string; isCredit: boolean } | null;
   addItem: (item: BillItem) => void;
   updateQty: (productId: string, qty: number) => void;
   updatePrice: (productId: string, price: number) => void;
   removeItem: (productId: string) => void;
   clearBill: () => void;
-  setCustomer: (customer: { name: string; phone: string; isCredit: boolean } | null) => void;
+  setCustomer: (customer: { id?: string; name: string; phone: string; isCredit: boolean } | null) => void;
 }
 
 export const useBillStore = create<BillState>((set) => ({

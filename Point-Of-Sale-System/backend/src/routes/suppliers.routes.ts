@@ -13,5 +13,7 @@ router.post('/', suppliersController.createSupplier);
 router.get('/:id', suppliersController.getSupplierById);
 router.put('/:id', suppliersController.updateSupplier);
 router.get('/:id/purchases', suppliersController.getSupplierPurchases);
+router.get('/:id/transactions', suppliersController.getSupplierTransactions);
+router.post('/:id/transactions', suppliersController.addSupplierTransaction);
 
 export default router;

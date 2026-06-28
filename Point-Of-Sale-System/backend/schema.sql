@@ -87,10 +87,13 @@ CREATE TABLE IF NOT EXISTS bills (
     discount_total DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
     grand_total DECIMAL(12, 2) NOT NULL,
     payment_mode VARCHAR(20) NOT NULL CHECK (payment_mode IN ('cash', 'upi', 'card', 'credit')),
-    payment_status VARCHAR(20) DEFAULT 'paid' CHECK (payment_status IN ('paid', 'pending')),
+    payment_status VARCHAR(20) DEFAULT 'paid' CHECK (payment_status IN ('paid', 'pending', 'cancelled')),
     cashier_id INTEGER REFERENCES users(id),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+ALTER TABLE bills ADD COLUMN IF NOT EXISTS cash_given NUMERIC(10,2);
+ALTER TABLE bills ADD COLUMN IF NOT EXISTS change_returned NUMERIC(10,2);
 
 -- 8. Bill Items
 CREATE TABLE IF NOT EXISTS bill_items (
@@ -146,3 +149,58 @@ CREATE TABLE IF NOT EXISTS settings (
     value TEXT,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS cashouts (
+    id SERIAL PRIMARY KEY,
+    submitted_by INTEGER NOT NULL REFERENCES users(id),
+    cashout_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    expected_cash NUMERIC(10,2) NOT NULL DEFAULT 0,
+    expected_gpay NUMERIC(10,2) NOT NULL DEFAULT 0,
+    expected_card NUMERIC(10,2) NOT NULL DEFAULT 0,
+    expected_credit NUMERIC(10,2) NOT NULL DEFAULT 0,
+    expected_total NUMERIC(10,2) NOT NULL DEFAULT 0,
+    actual_cash NUMERIC(10,2),
+    actual_gpay NUMERIC(10,2),
+    actual_card NUMERIC(10,2),
+    notes TEXT,
+    status VARCHAR(20) DEFAULT 'closed',
+    closed_at TIMESTAMP DEFAULT NOW(),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT cashouts_date_unique UNIQUE (cashout_date)
+);
+
+
+CREATE TABLE IF NOT EXISTS supplier_transactions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  supplier_id UUID REFERENCES suppliers(id) ON DELETE CASCADE,
+  type VARCHAR(50) NOT NULL CHECK (type IN ('purchase', 'payment', 'adjustment')),
+  amount DECIMAL(10, 2) NOT NULL,
+  reference_id VARCHAR(255),
+  notes TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+ALTER TABLE purchases ADD COLUMN supplier_id UUID REFERENCES suppliers(id);
+-- Create Customers Table
+CREATE TABLE IF NOT EXISTS customers (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name VARCHAR(255) NOT NULL,
+  phone VARCHAR(50) UNIQUE,
+  credit_limit NUMERIC(12,2) DEFAULT 0,
+  credit_used NUMERIC(12,2) DEFAULT 0,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Alter Users
+ALTER TABLE users ADD COLUMN IF NOT EXISTS credit_limit NUMERIC(12,2) DEFAULT 0;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS credit_used NUMERIC(12,2) DEFAULT 0;
+
+-- Alter Suppliers
+ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS credit_limit NUMERIC(12,2) DEFAULT 0;
+
+-- Alter Bills
+ALTER TABLE bills ADD COLUMN IF NOT EXISTS customer_id UUID REFERENCES customers(id);
+ALTER TABLE bills ADD COLUMN IF NOT EXISTS credit_due NUMERIC(12,2) DEFAULT 0;
+ALTER TABLE bills ADD COLUMN IF NOT EXISTS credit_status VARCHAR(20) DEFAULT 'paid' CHECK (credit_status IN ('paid', 'partial', 'pending'));
+
+-- Alter Purchases
+ALTER TABLE purchases ADD COLUMN IF NOT EXISTS supplier_credit_due NUMERIC(12,2) DEFAULT 0;

@@ -15,7 +15,17 @@ export const createExpense = async (expense: Omit<Expense, 'id'>) => {
   return response.data;
 };
 
-export const getMonthlyExpenses = async () => {
-  const response = await api.get('/expenses/monthly');
+export const getMonthlyExpenses = async (params?: {
+  start_date?: string;
+  end_date?: string;
+  category?: string;
+}) => {
+  const response = await api.get('/expenses/monthly', { params });
+  return response.data;
+};
+
+
+export const updateExpense = async (id: number, data: Partial<Expense>) => {
+  const response = await api.put(`/expenses/${id}`, data);
   return response.data;
 };

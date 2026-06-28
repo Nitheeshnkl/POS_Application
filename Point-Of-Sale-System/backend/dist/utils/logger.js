@@ -1,7 +1,4 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.logger = void 0;
-exports.logger = {
+export const logger = {
     info: (message, ...args) => {
         console.log(`[INFO] ${new Date().toISOString()}: ${message}`, ...args);
     },

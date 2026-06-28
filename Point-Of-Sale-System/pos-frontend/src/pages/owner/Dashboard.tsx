@@ -62,6 +62,14 @@ const Dashboard: React.FC = () => {
         <MetricCard title="Monthly Sales" value={formatCurrency(thisMonth.sales || 0)} color="purple" />
       </div>
 
+      <h2 className="text-xl font-bold mb-4">Investment vs Profit (This Month)</h2>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <MetricCard title="Purchases (Stock)" value={formatCurrency(thisMonth.purchases || 0)} color="orange" />
+        <MetricCard title="Other Expenses" value={formatCurrency(thisMonth.expenses || 0)} color="orange" />
+        <MetricCard title="Total Spent" value={formatCurrency((thisMonth.purchases || 0) + (thisMonth.expenses || 0))} color="red" />
+        <MetricCard title="Net Profit" value={formatCurrency(thisMonth.profit || 0)} color={(thisMonth.profit || 0) >= 0 ? 'green' : 'red'} />
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
         <div className="bg-white p-6 rounded-lg shadow">
           <h2 className="text-lg font-semibold mb-4">Daily Sales (Last 30 Days)</h2>

@@ -1,7 +1,4 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.roleGuard = void 0;
-const roleGuard = (roles) => {
+export const roleGuard = (roles) => {
     return (req, res, next) => {
         if (!req.user) {
             return res.status(401).json({ message: 'Unauthorized' });
@@ -12,4 +9,3 @@ const roleGuard = (roles) => {
         next();
     };
 };
-exports.roleGuard = roleGuard;

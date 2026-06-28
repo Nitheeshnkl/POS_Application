@@ -1,11 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
 import toast, { Toaster } from 'react-hot-toast';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { useBillStore } from '../../store/billStore';
-
+import { useAuthStore } from '../../store/authStore';
+import { getCustomers } from '../../api/customers';
 import { searchProducts, getProducts, createProduct } from '../../api/products';
 import { createBill } from '../../api/bills';
 import { getCategories } from '../../api/categories';
+import { createRequestedProduct } from '../../api/requested_products';
+import { OtherItemModal } from '../../components/OtherItemModal';
+import { ManualProductEntryModal } from '../../components/ManualProductEntryModal';
 import { Product, Category, BillItem } from '../../types';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
@@ -13,27 +17,84 @@ import { Modal } from '../../components/ui/Modal';
 import { Badge } from '../../components/ui/Badge';
 import { formatCurrency } from '../../utils/formatCurrency';
 import { printReceipt } from '../../utils/printReceipt';
+import { LanguageToggle } from '../../components/ui/LanguageToggle';
+import { useLanguage } from '../../i18n/LanguageContext';
 
 const Billing: React.FC = () => {
   const { items, addItem, updateQty, updatePrice, removeItem, clearBill, customer, setCustomer } = useBillStore();
+  const { language, t } = useLanguage();
+  const { data: customers = [] } = useQuery({ queryKey: ['customers'], queryFn: getCustomers });
+  const { user } = useAuthStore();
+  const queryClient = useQueryClient();
 
+  const [productTab, setProductTab] = useState<'browse' | 'search'>('browse');
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<Product[]>([]);
-  const [isSearching, setIsSearching] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [showManualModal, setShowManualModal] = useState(false);
+  const [showCustomerRequestModal, setShowCustomerRequestModal] = useState(false);
+  const [showOtherModal, setShowOtherModal] = useState(false);
   const [showCustomerModal, setShowCustomerModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showQtyModal, setShowQtyModal] = useState<Product | null>(null);
   const [qtyInput, setQtyInput] = useState('1');
   const [paymentMode, setPaymentMode] = useState<'cash' | 'upi' | 'card' | 'credit' | ''>('');
+  const [overrideCredit, setOverrideCredit] = useState(false);
   const [cashGiven, setCashGiven] = useState('');
 
   const { data: allProducts = [] } = useQuery<Product[]>({
-    queryKey: ['products-all'],
+    queryKey: ['products', 'all'],
     queryFn: () => getProducts({ is_active: true }),
   });
 
-  const displayProducts = searchQuery.trim().length >= 2 ? searchResults : allProducts;
+  const { data: categories = [] } = useQuery<Category[]>({
+    queryKey: ['categories'],
+    queryFn: getCategories,
+  });
+
+  const createProductMutation = useMutation({
+    mutationFn: createProduct,
+    onSuccess: (newProduct) => {
+      queryClient.invalidateQueries({ queryKey: ['products'] });
+      toast.success(t('productAdded' as any) || 'Product created successfully');
+      setShowManualModal(false);
+      addItem({
+        productId: newProduct.id,
+        productNameEn: newProduct.nameEn,
+        productNameTa: newProduct.nameTa || '',
+        qty: 1,
+        unitPrice: newProduct.sellingPrice,
+        gstRate: newProduct.gstRate || 0,
+        total: newProduct.sellingPrice
+      });
+      setSearchQuery('');
+    },
+    onError: () => {
+      toast.error(t('errorSaving' as any) || 'Error creating product');
+    }
+  });
+
+  const requestProductMutation = useMutation({
+    mutationFn: createRequestedProduct,
+    onSuccess: () => {
+      toast.success('Product request saved successfully!');
+      setShowManualModal(false);
+    },
+    onError: () => toast.error('Failed to save request')
+  });
+
+  const { data: searchResults = [], isFetching: isSearching } = useQuery<Product[]>({
+    queryKey: ['products', 'search', searchQuery],
+    queryFn: () => searchProducts(searchQuery),
+    enabled: searchQuery.trim().length >= 2,
+  });
+
+  const browseProducts = selectedCategory
+    ? allProducts.filter((product) => product.categoryId === selectedCategory)
+    : allProducts;
+
+  const displayProducts = productTab === 'search'
+    ? (searchQuery.trim().length >= 2 ? searchResults : [])
+    : browseProducts;
 
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -42,23 +103,6 @@ const Billing: React.FC = () => {
       searchInputRef.current.focus();
     }
   }, []);
-
-  const handleSearch = async (q: string) => {
-    setSearchQuery(q);
-    if (q.length >= 2) {
-      setIsSearching(true);
-      try {
-        const results = await searchProducts(q);
-        setSearchResults(results);
-      } catch (error) {
-        console.error('Search failed', error);
-      } finally {
-        setIsSearching(false);
-      }
-    } else {
-      setSearchResults([]);
-    }
-  };
 
   const handleAddToCart = (product: Product, qty: number) => {
     const billItem: BillItem = {
@@ -74,7 +118,6 @@ const Billing: React.FC = () => {
     setShowQtyModal(null);
     setQtyInput('1');
     setSearchQuery('');
-    setSearchResults([]);
     searchInputRef.current?.focus();
   };
 
@@ -93,21 +136,26 @@ const Billing: React.FC = () => {
     const toastId = toast.loading('Saving bill...');
     try {
       const billData: any = {
+        customer_id: customer?.id,
         customer_name: customer?.name,
         customer_phone: customer?.phone,
         payment_mode: mode,
+        override_credit: overrideCredit,
         items: items.map((item) => ({
           product_id: item.productId,
           quantity: item.qty,
         })),
         discount_total: 0,
       };
-      if (mode === 'cash' && cashGiven !== '') {
+      if (cashGiven !== '') {
         billData.cash_given = Number(cashGiven);
-        billData.change_returned = Math.max(0, change);
+        billData.change_returned = change > 0 ? change : null;
       }
 
       const savedBill = await createBill(billData);
+      
+      queryClient.invalidateQueries({ queryKey: ['products'] });
+      queryClient.invalidateQueries({ queryKey: ['bills'] });
 
       if (print) {
         printReceipt(savedBill);
@@ -124,58 +172,118 @@ const Billing: React.FC = () => {
     }
   };
 
+  const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchQuery(e.target.value);
+  };
+
   return (
     <>
       <Toaster position="top-right" />
-      <div className="flex flex-col md:flex-row h-full gap-4 p-4">
-        <div className="flex-1 flex flex-col gap-4">
-          <div className="bg-white p-4 rounded-lg shadow">
-            <Input
-              ref={searchInputRef}
-              label="Search Products"
-              placeholder="Type name or barcode..."
-              value={searchQuery}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleSearch(e.target.value)}
-            />
-            {searchQuery.length >= 2 && searchResults.length === 0 && !isSearching && (
+      <div className="flex flex-col md:flex-row h-[calc(100vh-4rem)]">
+        <div className="w-full md:w-2/3 flex flex-col h-[50vh] md:h-full bg-slate-50 border-b md:border-b-0 md:border-r border-slate-200">
+          <div className="bg-white p-4 rounded-lg shadow flex justify-between items-center">
+            <div style={{ display: 'flex', gap: '8px' }}>
+              {(['browse', 'search'] as const).map(tab => (
+                <button
+                  key={tab}
+                  onClick={() => setProductTab(tab)}
+                  style={{
+                    padding: '7px 16px',
+                    borderRadius: '6px',
+                    fontSize: '13px',
+                    fontWeight: 500,
+                    cursor: 'pointer',
+                    border: '1px solid',
+                    borderColor: productTab === tab ? '#1a6b3c' : '#d1d5db',
+                    background: productTab === tab ? '#1a6b3c' : '#fff',
+                    color: productTab === tab ? '#fff' : '#374151',
+                  }}
+                >
+                  {tab === 'browse' ? t('browseProducts') : t('search')}
+                </button>
+              ))}
+            </div>
+
+            {productTab === 'search' && (
+              <input
+                ref={searchInputRef}
+                autoFocus
+                type="text"
+                placeholder={t('searchPlaceholder')}
+                value={searchQuery}
+                onChange={handleSearch}
+                style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #d1d5db', borderRadius: '6px', padding: '10px 12px', fontSize: '14px', color: '#111827', background: '#fff', outline: 'none', marginLeft: '10px' }}
+              />
+            )}
+            <LanguageToggle />
+          </div>
+
+          {productTab === 'browse' ? (
+            <div className="p-4 bg-white rounded-lg shadow mb-4">
+              <h3 className="font-semibold text-slate-700 mb-3">{t('categories')}</h3>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant={selectedCategory === null ? 'primary' : 'outline'}
+                  size="sm"
+                  onClick={() => setSelectedCategory(null)}
+                >
+                  All
+                </Button>
+                {categories.map((cat) => (
+                  <Button
+                    key={cat.id}
+                    variant={selectedCategory === cat.id ? 'primary' : 'outline'}
+                    size="sm"
+                    onClick={() => setSelectedCategory(cat.id)}
+                  >
+                    {language === 'TA' ? cat.nameTa || cat.nameEn : cat.nameEn}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            productTab === 'search' && searchQuery.length >= 2 && searchResults.length === 0 && !isSearching && (
               <div className="mt-4 p-4 border-2 border-dashed rounded text-center">
                 <p className="text-gray-500 mb-2">No products found</p>
                 <Button onClick={() => setShowManualModal(true)}>+ Add New Product</Button>
               </div>
-            )}
+            )
+          )}
 
-            <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2 overflow-y-auto max-h-[60vh]">
-              {displayProducts.map((product) => (
-                <div
-                  key={product.id}
-                  className="p-3 border rounded-lg cursor-pointer hover:bg-blue-50 transition-colors"
-                  onClick={() => setShowQtyModal(product)}
+            <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 overflow-y-auto max-h-[60vh]">
+              {displayProducts.map((prod) => (
+                <button
+                  key={prod.id}
+                  onClick={() => handleAddToCart(prod, 1)}
+                  disabled={prod.currentStock <= 0}
+                  className="border border-gray-200 rounded-lg p-3 text-left flex flex-col gap-2 hover:border-green-600 transition-colors"
                 >
-                  <div className="font-bold">{product.nameEn}</div>
-                  <div className="text-sm text-gray-500">{product.nameTa}</div>
-                  <div className="flex justify-between mt-2">
-                    <span className="text-blue-600 font-bold">{formatCurrency(product.sellingPrice)}</span>
-                    <Badge variant={product.currentStock > 10 ? 'success' : 'danger'}>
-                      Stock: {product.currentStock} {product.unitType}
+                  <h3 className="font-semibold text-slate-800 text-sm mb-1 line-clamp-2 min-h-[40px]">
+                    {language === 'TA' ? prod.nameTa || prod.nameEn : prod.nameEn}
+                  </h3>
+                  <div className="flex justify-between items-end mt-auto">
+                    <span className="text-blue-600 font-bold">{formatCurrency(prod.sellingPrice)}</span>
+                    <Badge variant={prod.currentStock > 10 ? 'success' : 'danger'}>
+                      {prod.currentStock} {prod.unitType}
                     </Badge>
                   </div>
-                  {product.gstRate > 0 && (
-                    <div className="text-xs text-gray-400 mt-1">GST: {product.gstRate}%</div>
-                  )}
-                </div>
+                </button>
               ))}
+              {displayProducts.length === 0 && (
+                <div style={{ gridColumn: '1/-1', padding: '32px', textAlign: 'center', color: '#9ca3af', fontSize: '14px' }}>
+                  {productTab === 'search' && searchQuery.length < 2 ? 'Type at least 2 characters to search' : 'No products found'}
+                </div>
+              )}
             </div>
-          </div>
         </div>
 
-        <div className="w-full md:w-96 flex flex-col gap-4">
-          <div className="bg-white p-4 rounded-lg shadow flex flex-col h-full">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-bold">Current Bill</h2>
-              <Button variant="outline" size="sm" onClick={() => setShowCustomerModal(true)}>
+        <div className="w-full md:w-1/3 flex flex-col h-[50vh] md:h-full bg-white relative">
+          <div className="p-4 border-b border-slate-200 bg-white sticky top-0 z-10 flex justify-between items-center">
+            <h2 className="text-lg font-bold text-slate-800">Current Bill</h2>
+            <Button variant="outline" size="sm" onClick={() => setShowCustomerModal(true)}>
                 {customer ? customer.name : 'Add Customer'}
-              </Button>
-            </div>
+            </Button>
+          </div>
 
             <div className="flex-1 overflow-y-auto mb-4 min-h-[300px]">
               {items.length === 0 ? (
@@ -194,9 +302,10 @@ const Billing: React.FC = () => {
                   <tbody>
                     {items.map((item) => (
                       <tr key={item.productId} style={{ borderBottom: '1px solid #f3f4f6' }}>
-                        <td style={{ padding: '8px 10px', color: '#111827', fontSize: '14px' }}>
-                          <div style={{ fontWeight: 500 }}>{item.productNameEn}</div>
-                          {item.productNameTa && <div style={{ fontSize: '12px', color: '#6b7280' }}>{item.productNameTa}</div>}
+                        <td style={{ padding: '8px 10px' }}>
+                          <div className="font-medium text-slate-800 text-sm">
+                            {language === 'TA' ? item.productNameTa || item.productNameEn : item.productNameEn}
+                          </div>
                           {item.gstRate > 0 && <div style={{ fontSize: '11px', color: '#2563eb' }}>GST {item.gstRate}%</div>}
                         </td>
                         <td style={{ padding: '8px 10px' }}>
@@ -241,7 +350,7 @@ const Billing: React.FC = () => {
               )}
             </div>
 
-            <div className="border-t pt-4 space-y-2">
+            <div className="border-t pt-4 space-y-2 bg-white p-4 sticky bottom-0 border-t shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)]">
               <div className="flex justify-between text-sm">
                 <span>Subtotal</span>
                 <span>{formatCurrency(subtotal)}</span>
@@ -255,6 +364,28 @@ const Billing: React.FC = () => {
               <div className="flex justify-between text-xl font-bold border-t pt-2">
                 <span>Total</span>
                 <span>{formatCurrency(total)}</span>
+              </div>
+              <div style={{ marginTop: '12px' }}>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, color: '#374151', marginBottom: '5px' }}>
+                  Cash given by customer (₹)
+                </label>
+                <input
+                  type="number"
+                  value={cashGiven}
+                  onChange={e => setCashGiven(e.target.value)}
+                  placeholder="Optional - enter to see change"
+                  style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #d1d5db', borderRadius: '6px', padding: '8px 10px', fontSize: '14px', color: '#111827', background: '#fff', outline: 'none' }}
+                />
+                {cashGiven !== '' && (
+                  <div style={{ marginTop: '8px', padding: '8px 12px', borderRadius: '6px', background: isShort ? '#fef2f2' : '#f0fdf4', border: `1px solid ${isShort ? '#fecaca' : '#bbf7d0'}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '13px', color: isShort ? '#b91c1c' : '#166534', fontWeight: 500 }}>
+                      {isShort ? 'Short by' : 'Change'}
+                    </span>
+                    <span style={{ fontSize: '18px', fontWeight: 700, color: isShort ? '#b91c1c' : '#166534' }}>
+                      ₹{Math.abs(change).toFixed(2)}
+                    </span>
+                  </div>
+                )}
               </div>
               <div className="grid grid-cols-2 gap-2 mt-4">
                 <Button variant="danger" onClick={clearBill} disabled={items.length === 0}>
@@ -284,7 +415,7 @@ const Billing: React.FC = () => {
                 autoFocus
               />
               <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => setShowQtyModal(null)}>Cancel</Button>
+                <Button variant="outline" onClick={() => setShowQtyModal(null)}>{t('cancel')}</Button>
                 <Button onClick={() => handleAddToCart(showQtyModal, parseFloat(qtyInput) || 0)}>
                   Add to Cart
                 </Button>
@@ -313,23 +444,53 @@ const Billing: React.FC = () => {
                 setCustomer({ ...customer!, phone: e.target.value, name: customer?.name || '', isCredit: customer?.isCredit || false })
               }
             />
-            <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
+            <div className="flex items-center gap-2 mt-1">
+              <input 
+                type="checkbox" 
                 checked={customer?.isCredit || false}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                onChange={(e) => 
                   setCustomer({ ...customer!, isCredit: e.target.checked, name: customer?.name || '', phone: customer?.phone || '' })
                 }
+                className="w-5 h-5 text-green-600 rounded"
               />
-              <label>Credit Purchase</label>
+              <span className="text-sm text-slate-600">Enable Credit Options</span>
             </div>
+            
+            {customer?.isCredit && (
+              <div className="mt-4">
+                <label>Select Existing Customer (Required for Credit)</label>
+                <select 
+                  className="w-full mt-1 border border-slate-300 rounded px-3 py-2"
+                  onChange={(e) => {
+                    const c = customers.find((x: any) => x.id === e.target.value);
+                    if (c) {
+                      setCustomer({ id: c.id, name: c.name, phone: c.phone, isCredit: true });
+                    }
+                  }}
+                  value={customer?.id || ''}
+                >
+                  <option value="">-- Select Customer --</option>
+                  {customers.map((c: any) => (
+                    <option key={c.id} value={c.id}>{c.name} ({c.phone}) - Available: ₹{Number(c.credit_limit) - Number(c.credit_used)}</option>
+                  ))}
+                </select>
+                
+                {user?.role === 'owner' && (
+                  <div className="flex items-center gap-2 mt-3">
+                    <input type="checkbox" checked={overrideCredit} onChange={(e) => setOverrideCredit(e.target.checked)} />
+                    <span className="text-sm text-red-600 font-bold">Owner Override (Ignore Limits)</span>
+                  </div>
+                )}
+              </div>
+            )}
+            
             <Button className="w-full" onClick={() => setShowCustomerModal(false)}>Save</Button>
           </div>
         </Modal>
 
         <Modal
           isOpen={showPaymentModal}
-          onClose={() => { setShowPaymentModal(false); setPaymentMode(''); setCashGiven(''); }}
+          onClose={() => { setShowPaymentModal(false); setPaymentMode(''); }}
           title="Finalize Payment"
         >
           <div style={{ padding: '4px 0' }}>
@@ -400,9 +561,9 @@ const Billing: React.FC = () => {
 
             <div style={{ display: 'flex', gap: '10px', marginTop: '4px' }}>
               <button
-                onClick={() => { setShowPaymentModal(false); setPaymentMode(''); setCashGiven(''); }}
+                onClick={() => { setShowPaymentModal(false); setPaymentMode(''); }}
                 style={{ flex: 1, padding: '11px', border: '1px solid #d1d5db', borderRadius: '6px', background: '#fff', color: '#374151', fontSize: '14px', cursor: 'pointer' }}
-              >Cancel</button>
+              >{t('cancel')}</button>
               <button
                 onClick={() => paymentMode && handleSaveBill(paymentMode)}
                 disabled={!paymentMode || (paymentMode === 'cash' && cashGiven !== '' && isShort)}
@@ -422,99 +583,90 @@ const Billing: React.FC = () => {
         <ManualProductEntryModal
           isOpen={showManualModal}
           onClose={() => setShowManualModal(false)}
-          onAdded={(p) => {
-            handleAddToCart(p, 1);
-            setShowManualModal(false);
+          initialSearch={searchQuery}
+          onSubmit={(data) => createProductMutation.mutate(data as any)}
+          isPending={createProductMutation.isPending}
+        />
+
+        <CustomerRequestModal
+          isOpen={showCustomerRequestModal}
+          onClose={() => setShowCustomerRequestModal(false)}
+          initialSearch={searchQuery}
+          onSubmit={(data) => requestProductMutation.mutate(data)}
+          isPending={requestProductMutation.isPending}
+        />
+
+        <OtherItemModal
+          isOpen={showOtherModal}
+          onClose={() => setShowOtherModal(false)}
+          onSubmit={(data) => {
+            addItem({
+              productId: 'CUSTOM',
+              productNameEn: data.name,
+              productNameTa: data.name,
+              qty: data.qty,
+              unitPrice: data.price,
+              gstRate: 0,
+              total: data.qty * data.price
+            });
+            setShowOtherModal(false);
           }}
         />
-      </div>
     </>
   );
 };
 
-interface ManualProductEntryModalProps {
+interface CustomerRequestModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAdded: (product: Product) => void;
+  initialSearch: string;
+  onSubmit: (data: { productName: string; productNameTa?: string; notes?: string }) => void;
+  isPending: boolean;
 }
 
-const ManualProductEntryModal: React.FC<ManualProductEntryModalProps> = ({ isOpen, onClose, onAdded }) => {
-  const [categories, setCategories] = useState<Category[]>([]);
+const CustomerRequestModal: React.FC<CustomerRequestModalProps> = ({ isOpen, onClose, initialSearch, onSubmit, isPending }) => {
   const [formData, setFormData] = useState({
-    nameEn: '',
-    nameTa: '',
-    categoryId: '',
-    unitType: 'pcs' as Product['unitType'],
-    purchasePrice: '',
-    sellingPrice: '',
-    initialStock: '0',
+    productName: initialSearch,
+    productNameTa: '',
+    notes: '',
   });
 
   useEffect(() => {
     if (isOpen) {
-      getCategories().then(setCategories);
+      setFormData(prev => ({ ...prev, productName: initialSearch }));
     }
-  }, [isOpen]);
+  }, [isOpen, initialSearch]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    try {
-      const product = await createProduct({
-        nameEn: formData.nameEn,
-        nameTa: formData.nameTa,
-        categoryId: formData.categoryId,
-        unitType: formData.unitType,
-        purchasePrice: parseFloat(formData.purchasePrice),
-        sellingPrice: parseFloat(formData.sellingPrice),
-        initialStock: parseFloat(formData.initialStock),
-      });
-      onAdded(product);
-    } catch (error) {
-      toast.error('Failed to add product');
-    }
+    onSubmit(formData);
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Add New Product">
+    <Modal isOpen={isOpen} onClose={onClose} title="Customer Requested Product">
       <form onSubmit={handleSubmit} className="space-y-4">
-        <Input label="Name (English)" required value={formData.nameEn} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, nameEn: e.target.value })} />
-        <Input label="Name (Tamil)" required value={formData.nameTa} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, nameTa: e.target.value })} />
+        <Input 
+          label="Product Name (English)" 
+          required 
+          value={formData.productName} 
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, productName: e.target.value })} 
+        />
+        <Input 
+          label="Product Name (Tamil)" 
+          value={formData.productNameTa} 
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, productNameTa: e.target.value })} 
+        />
         <div>
-          <label className="block text-sm font-medium mb-1">Category</label>
-          <select
+          <label className="block text-sm font-medium mb-1">Notes / Description</label>
+          <textarea
             className="w-full border rounded-md p-2"
-            value={formData.categoryId}
-            onChange={(e) => setFormData({ ...formData, categoryId: e.target.value })}
-            required
-          >
-            <option value="">Select Category</option>
-            {categories.map((c) => (
-              <option key={c.id} value={c.id}>{c.nameEn}</option>
-            ))}
-          </select>
+            value={formData.notes}
+            onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+            rows={3}
+            placeholder="e.g. 500g packet, specific brand"
+          />
         </div>
-        <div className="grid grid-cols-2 gap-4">
-          <Input label="Purchase Price" type="number" required value={formData.purchasePrice} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, purchasePrice: e.target.value })} />
-          <Input label="Selling Price" type="number" required value={formData.sellingPrice} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, sellingPrice: e.target.value })} />
-        </div>
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium mb-1">Unit</label>
-            <select
-              className="w-full border rounded-md p-2"
-              value={formData.unitType}
-              onChange={(e) => setFormData({ ...formData, unitType: e.target.value as Product['unitType'] })}
-            >
-              <option value="pcs">Pcs</option>
-              <option value="kg">Kg</option>
-              <option value="g">G</option>
-              <option value="packet">Packet</option>
-              <option value="liter">Liter</option>
-            </select>
-          </div>
-          <Input label="Initial Stock" type="number" value={formData.initialStock} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, initialStock: e.target.value })} />
-        </div>
-        <Button type="submit" className="w-full">Save & Add to Bill</Button>
+        <Button type="submit" className="w-full" isLoading={isPending}>Save Request</Button>
       </form>
     </Modal>
   );

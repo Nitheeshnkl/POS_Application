@@ -15,7 +15,11 @@ import settingsRoutes from './routes/settings.routes.js';
 import usersRoutes from './routes/users.routes.js';
 import reportsRoutes from './routes/reports.routes.js';
 import cashoutRoutes from './routes/cashout.routes.js';
+import { runMigrations } from './config/db.js';
 import suppliersRoutes from './routes/suppliers.routes.js';
+import customersRoutes from './routes/customers.routes.js';
+import requestedProductsRoutes from './routes/requested_products.routes.js';
+import exportRoutes from './routes/export.routes.js';
 import { logger } from './utils/logger.js';
 
 validateEnv();
@@ -41,8 +45,15 @@ app.use('/api/v1/notifications', notificationsRoutes);
 app.use('/api/v1/settings', settingsRoutes);
 app.use('/api/v1/users', usersRoutes);
 app.use('/api/v1/reports', reportsRoutes);
-app.use('/api/v1/cashouts', cashoutRoutes);
+app.use('/api/v1/cashout', cashoutRoutes);
 app.use('/api/v1/suppliers', suppliersRoutes);
+app.use('/api/v1/customers', customersRoutes);
+app.use('/api/v1/requested-products', requestedProductsRoutes);
+app.use('/api/v1/export', exportRoutes);
+
+app.get('/api/v1/audit-logs', (req: Request, res: Response) => {
+  res.json({ success: true, data: [] });
+});
 
 app.get('/health', (req: Request, res: Response) => {
   res.json({ status: 'ok' });
@@ -52,6 +63,12 @@ app.use(errorHandler);
 
 const PORT = env.PORT;
 
-app.listen(PORT, () => {
-  logger.info(`Server running on port ${PORT} in ${env.NODE_ENV} mode`);
+// Run DB migrations then start server
+runMigrations().then(() => {
+  app.listen(PORT, () => {
+    logger.info(`Server running on port ${PORT} in ${env.NODE_ENV} mode`);
+  });
+}).catch((err) => {
+  logger.info(`Failed to run migrations: ${err.message}`);
+  process.exit(1);
 });

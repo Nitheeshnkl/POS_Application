@@ -10,6 +10,7 @@ router.use(roleGuard(['owner']));
 
 router.get('/', expensesController.getExpenses);
 router.post('/', expensesController.createExpense);
+router.put('/:id', expensesController.updateExpense);
 router.get('/monthly', expensesController.getMonthlyExpenses);
 
 export default router;

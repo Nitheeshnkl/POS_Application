@@ -8,7 +8,6 @@ export const printReceipt = async (bill: Bill) => {
   // The requirement asked for jspdf, but since I can't install it, 
   // I'll provide a placeholder function that the user can improve 
   // or I'll implement a clean printable HTML if needed in T006.
-  console.log('Printing receipt for bill:', bill.billNumber);
   
   const printWindow = window.open('', '_blank');
   if (!printWindow) return;
@@ -53,10 +52,10 @@ export const printReceipt = async (bill: Bill) => {
         </table>
         <div class="divider"></div>
         <div class="right">
-          <p>Subtotal: ${formatCurrency(bill.totalAmount)}</p>
-          <p>GST: ${formatCurrency(bill.gstAmount)}</p>
-          <p>Discount: ${formatCurrency(bill.discount)}</p>
-          <p class="total">Total: ${formatCurrency(bill.payableAmount)}</p>
+          <p>Subtotal: ${formatCurrency(bill.subtotal)}</p>
+          <p>GST: ${formatCurrency(bill.gstTotal)}</p>
+          <p>Discount: ${formatCurrency(bill.discountTotal)}</p>
+          <p class="total">Total: ${formatCurrency(bill.grandTotal)}</p>
         </div>
         <div class="divider"></div>
         <div class="header">

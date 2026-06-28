@@ -7,6 +7,8 @@ export interface User {
   phone?: string;
   role: Role;
   isActive: boolean;
+  credit_limit?: number;
+  credit_used?: number;
   createdAt: string;
 }
 
@@ -30,6 +32,8 @@ export interface Product {
   minStockAlert: number;
   gstRate: number;
   isActive: boolean;
+  credit_limit?: number;
+  credit_used?: number;
   category?: Category;
 }
 
@@ -55,6 +59,13 @@ export interface Bill {
   gstTotal: number;
   discountTotal: number;
   grandTotal: number;
+  totalAmount?: number;
+  gstAmount?: number;
+  discount?: number;
+  payableAmount?: number;
+  status?: string;
+  cashGiven?: number;
+  changeReturned?: number;
   paymentMode: 'cash' | 'upi' | 'card' | 'credit';
   paymentStatus: 'paid' | 'pending' | 'cancelled';
   createdAt: string;
@@ -73,6 +84,7 @@ export interface PurchaseItem {
 }
 
 export interface Purchase {
+  supplier_id?: string;
   id: string;
   supplierName: string;
   supplierPhone?: string;
@@ -134,21 +146,37 @@ export interface Supplier {
   gstin?: string;
   address?: string;
   notes?: string;
+  balance?: number;
+  credit_limit?: number;
   createdAt: string;
+}
+
+export interface SupplierTransaction {
+  id: string;
+  supplier_id: string;
+  type: 'purchase' | 'payment' | 'adjustment';
+  amount: number;
+  reference_id?: string;
+  notes?: string;
+  created_at: string;
 }
 
 export interface Cashout {
   id: string;
-  cashierId: string;
-  cashierName: string;
+  submittedBy: string;
+  submittedByName: string;
+  cashierName?: string;
   cashoutDate: string;
   expectedCash: number;
+  expectedGpay: number;
   expectedUpi: number;
   expectedCard: number;
   expectedCredit: number;
+  expectedTotal: number;
   actualCash?: number;
+  actualGpay?: number;
+  actualCard?: number;
   cashDifference?: number;
-  denominationBreakdown?: Record<string, number>;
   notes?: string;
   status: 'open' | 'closed';
   closedAt?: string;

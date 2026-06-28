@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getPurchases, createPurchase, getPurchase } from '../../api/purchases';
 import { searchProducts } from '../../api/products';
+import { getSuppliers } from '../../api/suppliers';
 import { Table } from '../../components/ui/Table';
 import { Button } from '../../components/ui/Button';
 import { Modal } from '../../components/ui/Modal';
@@ -18,12 +19,15 @@ const Purchases: React.FC = () => {
   const [selectedPurchase, setSelectedPurchase] = useState<Purchase | null>(null);
 
   const [formData, setFormData] = useState({
+    supplierId: '',
     supplierName: '',
     supplierPhone: '',
     invoiceNumber: '',
     paymentMode: 'cash',
     items: [] as any[],
   });
+
+  const { data: suppliers = [] } = useQuery({ queryKey: ['suppliers'], queryFn: getSuppliers });
 
   const { data: purchases = [], isLoading } = useQuery({
     queryKey: ['purchases'],
@@ -40,11 +44,12 @@ const Purchases: React.FC = () => {
 
   const handleOpenModal = () => {
     setFormData({
+      supplierId: '',
       supplierName: '',
       supplierPhone: '',
       invoiceNumber: '',
       paymentMode: 'cash',
-      items: [{ productId: '', productNameEn: '', qty: 1, purchasePrice: 0, total: 0 }],
+      items: [{ productId: '', productNameEn: '', qty: '', purchasePrice: '', total: 0 }],
     });
     setIsModalOpen(true);
   };
@@ -56,7 +61,7 @@ const Purchases: React.FC = () => {
   const handleAddItem = () => {
     setFormData({
       ...formData,
-      items: [...formData.items, { productId: '', productNameEn: '', qty: 1, purchasePrice: 0, total: 0 }],
+      items: [...formData.items, { productId: '', productNameEn: '', qty: '', purchasePrice: '', total: 0 }],
     });
   };
 
@@ -70,7 +75,7 @@ const Purchases: React.FC = () => {
     const newItems = [...formData.items];
     newItems[index][field] = value;
     if (field === 'qty' || field === 'purchasePrice') {
-      newItems[index].total = newItems[index].qty * newItems[index].purchasePrice;
+      newItems[index].total = (Number(newItems[index].qty) || 0) * (Number(newItems[index].purchasePrice) || 0);
     }
     setFormData({ ...formData, items: newItems });
   };
@@ -83,16 +88,28 @@ const Purchases: React.FC = () => {
       const newItems = [...formData.items];
       newItems[index].productId = product.id;
       newItems[index].productNameEn = product.nameEn;
-      newItems[index].purchasePrice = product.purchasePrice;
-      newItems[index].total = newItems[index].qty * product.purchasePrice;
+      newItems[index].purchasePrice = product.purchasePrice.toString();
+      newItems[index].total = (Number(newItems[index].qty) || 0) * product.purchasePrice;
       setFormData({ ...formData, items: newItems });
     }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const totalAmount = formData.items.reduce((sum, item) => sum + item.total, 0);
-    createMutation.mutate({ ...formData, totalAmount });
+    const mappedItems = formData.items.map(item => ({
+      product_id: item.productId,
+      quantity: Number(item.qty),
+      unit_price: Number(item.purchasePrice),
+    })) as any[];
+    const totalAmount = mappedItems.reduce((sum: number, item: any) => sum + (item.quantity * item.unit_price), 0);
+    createMutation.mutate({ 
+      supplierName: formData.supplierName,
+      supplierPhone: formData.supplierPhone,
+      invoiceNumber: formData.invoiceNumber,
+      paymentMode: formData.paymentMode,
+      items: mappedItems,
+      totalAmount 
+    });
   };
 
   const handleViewPurchase = async (purchase: Purchase) => {
@@ -160,17 +177,25 @@ const Purchases: React.FC = () => {
       >
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-            <Input
-              label="Supplier Name"
-              value={formData.supplierName}
-              onChange={(e) => setFormData({ ...formData, supplierName: e.target.value })}
-              required
-            />
-            <Input
-              label="Supplier Phone"
-              value={formData.supplierPhone}
-              onChange={(e) => setFormData({ ...formData, supplierPhone: e.target.value })}
-            />
+            <div className="space-y-1.5">
+              <label className="block text-[13px] font-medium text-slate-700">Supplier</label>
+              <select
+                value={formData.supplierId}
+                onChange={(e) => {
+                  const s = suppliers.find(sup => sup.id === e.target.value);
+                  if (s) {
+                    setFormData({ ...formData, supplierId: s.id, supplierName: s.name, supplierPhone: s.phone || '' });
+                  } else {
+                    setFormData({ ...formData, supplierId: '', supplierName: '', supplierPhone: '' });
+                  }
+                }}
+                className="w-full box-border border border-slate-300 rounded-md py-2 px-3 text-sm text-slate-900 bg-white outline-none focus:ring-2 focus:ring-green-600/20 focus:border-green-600"
+                required
+              >
+                <option value="">Select Supplier...</option>
+                {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            </div>
             <Input
               label="Invoice Number"
               value={formData.invoiceNumber}
@@ -218,7 +243,7 @@ const Purchases: React.FC = () => {
                       type="number"
                       placeholder="Qty"
                       value={item.qty}
-                      onChange={(e) => handleItemChange(index, 'qty', Number(e.target.value))}
+                      onChange={(e) => handleItemChange(index, 'qty', e.target.value)}
                       required
                     />
                   </div>
@@ -228,7 +253,7 @@ const Purchases: React.FC = () => {
                       placeholder="Price"
                       step="0.01"
                       value={item.purchasePrice}
-                      onChange={(e) => handleItemChange(index, 'purchasePrice', Number(e.target.value))}
+                      onChange={(e) => handleItemChange(index, 'purchasePrice', e.target.value)}
                       required
                     />
                   </div>
@@ -294,12 +319,12 @@ const Purchases: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
-                {selectedPurchase.items?.map((item, idx) => (
+                {selectedPurchase.items?.map((item: any, idx: number) => (
                   <tr key={idx}>
-                    <td className="px-4 py-2 text-sm">{item.productNameEn}</td>
-                    <td className="px-4 py-2 text-sm text-right">{item.qty}</td>
-                    <td className="px-4 py-2 text-sm text-right">{formatCurrency(item.purchasePrice)}</td>
-                    <td className="px-4 py-2 text-sm text-right">{formatCurrency(item.total)}</td>
+                    <td className="px-4 py-2 text-sm">{item.nameEn || '—'}</td>
+                    <td className="px-4 py-2 text-sm text-right">{item.quantity}</td>
+                    <td className="px-4 py-2 text-sm text-right">{formatCurrency(item.unitPrice)}</td>
+                    <td className="px-4 py-2 text-sm text-right">{formatCurrency(item.totalPrice)}</td>
                   </tr>
                 ))}
               </tbody>

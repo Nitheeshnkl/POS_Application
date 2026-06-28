@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from 'react-hot-toast';
 import { useAuthStore } from './store/authStore';
 import apiClient from './api/client';
+import { LanguageProvider } from './i18n/LanguageContext';
 
 import OwnerLayout from './components/layout/OwnerLayout';
 import CashierLayout from './components/layout/CashierLayout';
@@ -21,13 +22,16 @@ import Cashiers from './pages/owner/Cashiers';
 import AuditLogs from './pages/owner/AuditLogs';
 import Settings from './pages/owner/Settings';
 import Reports from './pages/owner/Reports';
+import CreditManagement from './pages/owner/CreditManagement';
 import Suppliers from './pages/owner/Suppliers';
 import CashoutHistory from './pages/owner/CashoutHistory';
+import Cashout from './pages/owner/Cashout';
+import RequestedProducts from './pages/owner/RequestedProducts';
+import { ExportCenter } from './pages/owner/ExportCenter';
 
 import Billing from './pages/cashier/Billing';
 import MyBills from './pages/cashier/MyBills';
 import StockView from './pages/cashier/StockView';
-import Cashout from './pages/cashier/Cashout';
 
 import { OwnerRoute, CashierRoute } from './components/ProtectedRoute';
 
@@ -39,17 +43,18 @@ const App: React.FC = () => {
 
   useEffect(() => {
     apiClient.get('/auth/setup-required')
-      .then(res => setSetupRequired(res.data.required))
+      .then(res => setSetupRequired(res.data.setupRequired))
       .catch(() => setSetupRequired(false));
   }, []);
 
   if (setupRequired === null) return <div className="flex h-screen items-center justify-center">Loading...</div>;
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <Toaster position="top-right" toastOptions={{ duration: 4000 }} />
-      <BrowserRouter>
-        <Routes>
+    <LanguageProvider>
+      <QueryClientProvider client={queryClient}>
+        <Toaster position="top-right" toastOptions={{ duration: 4000 }} />
+        <BrowserRouter>
+          <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/setup" element={setupRequired ? <Setup /> : <Navigate to="/login" />} />
 
@@ -62,11 +67,15 @@ const App: React.FC = () => {
             <Route path="stock-movements" element={<StockMovements />} />
             <Route path="expenses" element={<Expenses />} />
             <Route path="reports" element={<Reports />} />
+          <Route path="credits" element={<CreditManagement />} />
             <Route path="cashiers" element={<Cashiers />} />
             <Route path="audit-logs" element={<AuditLogs />} />
             <Route path="settings" element={<Settings />} />
+            <Route path="export-center" element={<ExportCenter />} />
             <Route path="suppliers" element={<Suppliers />} />
+            <Route path="cashout" element={<Cashout />} />
             <Route path="cashout-history" element={<CashoutHistory />} />
+            <Route path="requested-products" element={<RequestedProducts />} />
           </Route>
 
           <Route path="/cashier" element={<CashierRoute><CashierLayout /></CashierRoute>}>
@@ -74,7 +83,6 @@ const App: React.FC = () => {
             <Route path="billing" element={<Billing />} />
             <Route path="my-bills" element={<MyBills />} />
             <Route path="stock-view" element={<StockView />} />
-            <Route path="cashout" element={<Cashout />} />
           </Route>
 
           <Route path="/" element={
@@ -85,6 +93,7 @@ const App: React.FC = () => {
         </Routes>
       </BrowserRouter>
     </QueryClientProvider>
+    </LanguageProvider>
   );
 };
 

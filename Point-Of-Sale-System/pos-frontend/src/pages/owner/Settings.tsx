@@ -4,15 +4,18 @@ import { getSettings, updateSettings } from '../../api/settings';
 import { Settings as SettingsType } from '../../types';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
+import { useLanguage } from '../../i18n/LanguageContext';
 
 const Settings: React.FC = () => {
   const queryClient = useQueryClient();
+  const { language, setLanguage } = useLanguage();
   const { data: settings, isLoading } = useQuery({
     queryKey: ['settings'],
     queryFn: getSettings
   });
 
   const [formData, setFormData] = useState<Partial<SettingsType>>({});
+  const [selectedLang, setSelectedLang] = useState<'EN' | 'TA'>(language);
 
   useEffect(() => {
     if (settings) {
@@ -20,10 +23,16 @@ const Settings: React.FC = () => {
     }
   }, [settings]);
 
+  useEffect(() => {
+    setSelectedLang(language);
+  }, [language]);
+
   const mutation = useMutation({
-    mutationFn: updateSettings,
+    mutationFn: (data: Partial<SettingsType> & { language?: string }) => updateSettings(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['settings'] });
+      // Apply language change immediately
+      setLanguage(selectedLang);
       alert('Settings updated successfully');
     },
     onError: (error: any) => {
@@ -31,7 +40,7 @@ const Settings: React.FC = () => {
     }
   });
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target;
     setFormData(prev => ({
       ...prev,
@@ -41,7 +50,7 @@ const Settings: React.FC = () => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    mutation.mutate(formData);
+    mutation.mutate({ ...formData, language: selectedLang });
   };
 
   if (isLoading) return <div>Loading...</div>;
@@ -58,6 +67,17 @@ const Settings: React.FC = () => {
             onChange={handleChange}
             required
           />
+          <div className="flex flex-col">
+            <label className="text-sm font-medium mb-1">Language / மொழி</label>
+            <select
+              className="border border-gray-300 rounded-md p-2 text-sm"
+              value={selectedLang}
+              onChange={(e) => setSelectedLang(e.target.value as 'EN' | 'TA')}
+            >
+              <option value="EN">English</option>
+              <option value="TA">தமிழ்</option>
+            </select>
+          </div>
           <Input
             label="Store Phone"
             name="storePhone"
@@ -100,7 +120,7 @@ const Settings: React.FC = () => {
               type="checkbox"
               id="gstEnabled"
               name="gstEnabled"
-              checked={formData.gstEnabled || false}
+              checked={formData.gstEnabled === true || String(formData.gstEnabled) === 'true'}
               onChange={handleChange}
               className="h-4 w-4 text-blue-600 rounded"
             />

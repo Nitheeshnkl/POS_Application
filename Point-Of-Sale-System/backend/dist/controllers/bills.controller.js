@@ -1,12 +1,6 @@
-"use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.cancelBill = exports.getBillById = exports.createBill = exports.getBills = void 0;
-const db_js_1 = __importDefault(require("../config/db.js"));
-const billNumber_js_1 = require("../utils/billNumber.js");
-const getBills = async (req, res, next) => {
+import pool from '../config/db.js';
+import { generateBillNumber } from '../utils/billNumber.js';
+export const getBills = async (req, res, next) => {
     try {
         const { start_date, end_date, cashier_id, payment_mode } = req.query;
         let query = 'SELECT * FROM bills WHERE 1=1';
@@ -25,28 +19,27 @@ const getBills = async (req, res, next) => {
         }
         if (end_date) {
             query += ' AND created_at <= $' + (params.length + 1);
-            params.push(end_date);
+            params.push(`${end_date} 23:59:59`);
         }
         if (payment_mode) {
             query += ' AND payment_mode = $' + (params.length + 1);
             params.push(payment_mode);
         }
         query += ' ORDER BY created_at DESC';
-        const result = await db_js_1.default.query(query, params);
+        const result = await pool.query(query, params);
         res.json(result.rows);
     }
     catch (error) {
         next(error);
     }
 };
-exports.getBills = getBills;
-const createBill = async (req, res, next) => {
-    const client = await db_js_1.default.connect();
+export const createBill = async (req, res, next) => {
+    const client = await pool.connect();
     try {
         await client.query('BEGIN');
         const { customer_name, customer_phone, items, payment_mode, discount_total = 0, cash_given = null, change_returned = null, } = req.body;
         const cashier_id = req.user?.id;
-        const bill_number = await (0, billNumber_js_1.generateBillNumber)();
+        const bill_number = await generateBillNumber();
         let subtotal = 0;
         let gst_total = 0;
         for (const item of items) {
@@ -98,16 +91,15 @@ const createBill = async (req, res, next) => {
         client.release();
     }
 };
-exports.createBill = createBill;
-const getBillById = async (req, res, next) => {
+export const getBillById = async (req, res, next) => {
     try {
         const { id } = req.params;
-        const billResult = await db_js_1.default.query('SELECT * FROM bills WHERE id = $1', [id]);
+        const billResult = await pool.query('SELECT * FROM bills WHERE id = $1', [id]);
         if (billResult.rows.length === 0) {
             return res.status(404).json({ message: 'Bill not found' });
         }
         const bill = billResult.rows[0];
-        const itemsResult = await db_js_1.default.query('SELECT * FROM bill_items WHERE bill_id = $1', [id]);
+        const itemsResult = await pool.query('SELECT * FROM bill_items WHERE bill_id = $1', [id]);
         bill.items = itemsResult.rows;
         res.json(bill);
     }
@@ -115,9 +107,8 @@ const getBillById = async (req, res, next) => {
         next(error);
     }
 };
-exports.getBillById = getBillById;
-const cancelBill = async (req, res, next) => {
-    const client = await db_js_1.default.connect();
+export const cancelBill = async (req, res, next) => {
+    const client = await pool.connect();
     try {
         await client.query('BEGIN');
         const { id } = req.params;
@@ -129,7 +120,7 @@ const cancelBill = async (req, res, next) => {
         if (bill.payment_status === 'cancelled') {
             return res.status(400).json({ message: 'Bill already cancelled' });
         }
-        await client.query("UPDATE bills SET payment_status = 'cancelled' WHERE id = $1", [id]);
+        const cancelledResult = await client.query("UPDATE bills SET payment_status = 'cancelled' WHERE id = $1 RETURNING *", [id]);
         const itemsResult = await client.query('SELECT * FROM bill_items WHERE bill_id = $1', [id]);
         for (const item of itemsResult.rows) {
             const stockUpdateResult = await client.query('UPDATE products SET current_stock = current_stock + $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING current_stock', [item.quantity, item.product_id]);
@@ -139,7 +130,7 @@ const cancelBill = async (req, res, next) => {
         }
         await client.query('INSERT INTO audit_logs (user_id, action, table_name, record_id) VALUES ($1, $2, $3, $4)', [req.user?.id, 'CANCEL_BILL', 'bills', id]);
         await client.query('COMMIT');
-        res.json({ message: 'Bill cancelled and stock restored' });
+        res.json(cancelledResult.rows[0]);
     }
     catch (error) {
         await client.query('ROLLBACK');
@@ -149,4 +140,3 @@ const cancelBill = async (req, res, next) => {
         client.release();
     }
 };
-exports.cancelBill = cancelBill;

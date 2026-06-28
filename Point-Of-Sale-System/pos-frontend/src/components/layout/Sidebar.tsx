@@ -16,31 +16,35 @@ import {
   BookOpen,
 } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
+import { useLanguage } from '../../i18n/LanguageContext';
 
 const Sidebar: React.FC = () => {
   const user = useAuthStore((state) => state.user);
+  const { t } = useLanguage();
 
   const ownerLinks = [
-    { to: '/owner', icon: <LayoutDashboard size={20} />, label: 'Dashboard', end: true },
-    { to: '/owner/billing', icon: <Receipt size={20} />, label: 'Billing' },
-    { to: '/owner/products', icon: <Package size={20} />, label: 'Products' },
-    { to: '/owner/categories', icon: <Tags size={20} />, label: 'Categories' },
-    { to: '/owner/suppliers', icon: <Truck size={20} />, label: 'Suppliers' },
-    { to: '/owner/purchases', icon: <ShoppingCart size={20} />, label: 'Purchases' },
-    { to: '/owner/stock-movements', icon: <History size={20} />, label: 'Stock History' },
-    { to: '/owner/expenses', icon: <TrendingUp size={20} />, label: 'Expenses' },
-    { to: '/owner/reports', icon: <BookOpen size={20} />, label: 'Reports' },
-    { to: '/owner/cashout-history', icon: <DollarSign size={20} />, label: 'Cashout History' },
-    { to: '/owner/cashiers', icon: <Users size={20} />, label: 'Cashiers' },
-    { to: '/owner/audit-logs', icon: <ClipboardList size={20} />, label: 'Audit Logs' },
-    { to: '/owner/settings', icon: <Settings size={20} />, label: 'Settings' },
+    { to: '/owner', icon: <LayoutDashboard size={20} />, label: t('dashboard'), end: true },
+    { to: '/owner/billing', icon: <Receipt size={20} />, label: t('billing') },
+    { to: '/owner/products', icon: <Package size={20} />, label: t('products') },
+    { to: '/owner/categories', icon: <Tags size={20} />, label: t('categories') },
+    { to: '/owner/suppliers', icon: <Truck size={20} />, label: t('supplier') },
+    { to: '/owner/purchases', icon: <ShoppingCart size={20} />, label: t('purchases') },
+    { to: '/owner/stock-movements', icon: <History size={20} />, label: t('stockHistory') },
+    { to: '/owner/expenses', icon: <TrendingUp size={20} />, label: t('expenses') },
+    { to: '/owner/reports', icon: <BookOpen size={20} />, label: t('reports') },
+    { to: '/owner/export-center', icon: <BookOpen size={20} />, label: 'Export Center' },
+    { to: '/owner/requested-products', icon: <ClipboardList size={20} />, label: t('requestedProducts') || 'Requested Products' },
+    { to: '/owner/cashout', icon: <DollarSign size={20} />, label: t('cashDrawer') },
+    { to: '/owner/cashout-history', icon: <DollarSign size={20} />, label: t('cashoutHistory') },
+    { to: '/owner/cashiers', icon: <Users size={20} />, label: t('cashiers') },
+    { to: '/owner/audit-logs', icon: <ClipboardList size={20} />, label: t('auditLogs') },
+    { to: '/owner/settings', icon: <Settings size={20} />, label: t('settings') },
   ];
 
   const cashierLinks = [
-    { to: '/cashier', icon: <Receipt size={20} />, label: 'Billing', end: true },
-    { to: '/cashier/my-bills', icon: <History size={20} />, label: 'My Bills' },
-    { to: '/cashier/stock-view', icon: <Package size={20} />, label: 'Stock View' },
-    { to: '/cashier/cashout', icon: <DollarSign size={20} />, label: 'Cash Drawer' },
+    { to: '/cashier', icon: <Receipt size={20} />, label: t('billing'), end: true },
+    { to: '/cashier/my-bills', icon: <History size={20} />, label: t('myBills') },
+    { to: '/cashier/stock-view', icon: <Package size={20} />, label: t('stockView') },
   ];
 
   const links = user?.role === 'owner' ? ownerLinks : cashierLinks;

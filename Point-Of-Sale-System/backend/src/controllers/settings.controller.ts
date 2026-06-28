@@ -23,7 +23,12 @@ export const updateSettings = async (req: Request, res: Response, next: NextFunc
         [key, String(value)]
       );
     }
-    res.json({ message: 'Settings updated successfully' });
+    const result = await pool.query('SELECT key, value FROM settings');
+    const updatedSettings: Record<string, string> = {};
+    result.rows.forEach(row => {
+      updatedSettings[row.key] = row.value;
+    });
+    res.json(updatedSettings);
   } catch (error) {
     next(error);
   }

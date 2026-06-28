@@ -7,8 +7,11 @@ import { Modal } from '../../components/ui/Modal';
 import { Input } from '../../components/ui/Input';
 import { Plus, Edit2, Trash2 } from 'lucide-react';
 import { Category } from '../../types';
+import { useLanguage } from '../../i18n/LanguageContext';
+import { LanguageToggle } from '../../components/ui/LanguageToggle';
 
 const Categories: React.FC = () => {
+  const { t } = useLanguage();
   const queryClient = useQueryClient();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
@@ -76,8 +79,8 @@ const Categories: React.FC = () => {
   };
 
   const columns = [
-    { header: 'Name (English)', accessor: 'nameEn' as const },
-    { header: 'Name (Tamil)', accessor: 'nameTa' as const },
+    { header: t('nameEnglish'), accessor: 'nameEn' as const },
+    { header: t('nameTamil'), accessor: 'nameTa' as const },
     {
       header: 'Actions',
       accessor: (category: Category) => (
@@ -105,11 +108,14 @@ const Categories: React.FC = () => {
   return (
     <div className="p-6">
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-slate-900">Categories</h1>
-        <Button onClick={() => handleOpenModal()}>
-          <Plus size={20} className="mr-2" />
-          Add Category
-        </Button>
+        <h1 className="text-2xl font-bold text-slate-900">{t('categories')}</h1>
+        <div className="flex items-center">
+          <Button onClick={() => handleOpenModal()}>
+            <Plus size={20} className="mr-2" />
+            {t('addCategory')}
+          </Button>
+          <LanguageToggle />
+        </div>
       </div>
 
       <Table
@@ -122,27 +128,27 @@ const Categories: React.FC = () => {
       <Modal
         isOpen={isModalOpen}
         onClose={handleCloseModal}
-        title={editingCategory ? 'Edit Category' : 'Add Category'}
+        title={editingCategory ? t('editCategory') : t('addCategory')}
         footer={
           <div className="flex justify-end space-x-3">
             <Button variant="outline" onClick={handleCloseModal}>
-              Cancel
+              {t('cancel')}
             </Button>
             <Button onClick={handleSubmit} isLoading={createMutation.isPending || updateMutation.isPending}>
-              {editingCategory ? 'Update' : 'Save'}
+              {editingCategory ? t('update') : t('save')}
             </Button>
           </div>
         }
       >
         <form onSubmit={handleSubmit} className="space-y-4">
           <Input
-            label="Name (English)"
+            label={t('nameEnglish')}
             value={formData.nameEn}
             onChange={(e) => setFormData({ ...formData, nameEn: e.target.value })}
             required
           />
           <Input
-            label="Name (Tamil)"
+            label={t('nameTamil')}
             value={formData.nameTa}
             onChange={(e) => setFormData({ ...formData, nameTa: e.target.value })}
             required

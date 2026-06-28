@@ -3,32 +3,35 @@ import pool from '../config/db.js';
 
 export const getAllProducts = async (req: Request, res: Response, next: NextFunction) => {
   const { q, category_id, is_active } = req.query;
-  
-  let query = `
-    SELECT p.*, c.name_en as category_name_en, c.name_ta as category_name_ta 
-    FROM products p 
-    LEFT JOIN categories c ON p.category_id = c.id 
-    WHERE 1=1
-  `;
   const params: any[] = [];
+  const where: string[] = [];
   
   if (q) {
     params.push(`%${q}%`);
-    query += ` AND (p.name_en ILIKE $${params.length} OR p.name_ta ILIKE $${params.length} OR p.barcode ILIKE $${params.length})`;
+    where.push(`(p.name_en ILIKE $${params.length} OR p.name_ta ILIKE $${params.length} OR p.barcode ILIKE $${params.length})`);
   }
   
   if (category_id) {
     params.push(category_id);
-    query += ` AND p.category_id = $${params.length}`;
+    where.push(`p.category_id = $${params.length}`);
   }
   
-  const activeFilter = is_active !== undefined ? is_active : 'true';
-  params.push(activeFilter === 'true');
-  query += ` AND p.is_active = $${params.length}`;
-
-  query += ' ORDER BY p.name_en ASC';
+  if (is_active === undefined) {
+    where.push('p.is_active = true');
+  } else if (is_active !== '') {
+    params.push(String(is_active) === 'true');
+    where.push(`p.is_active = $${params.length}`);
+  }
 
   try {
+    const query = `
+      SELECT p.*, c.name_en AS category_name, c.name_en AS category_name_en, c.name_ta AS category_name_ta
+      FROM products p
+      LEFT JOIN categories c ON c.id = p.category_id
+      WHERE ${where.length > 0 ? where.join(' AND ') : '1=1'}
+      ORDER BY p.name_en
+      LIMIT 100
+    `;
     const result = await pool.query(query, params);
     res.json(result.rows);
   } catch (error) {
@@ -37,17 +40,26 @@ export const getAllProducts = async (req: Request, res: Response, next: NextFunc
 };
 
 export const searchProducts = async (req: Request, res: Response, next: NextFunction) => {
-  const { q } = req.query;
+  const { q, is_active } = req.query;
   if (!q) return res.json([]);
 
   try {
+    const params: any[] = [`%${q}%`];
+    const where = ['(name_en ILIKE $1 OR name_ta ILIKE $1 OR barcode ILIKE $1)'];
+    if (is_active === undefined) {
+      where.push('is_active = true');
+    } else if (is_active !== '') {
+      params.push(String(is_active) === 'true');
+      where.push(`is_active = $${params.length}`);
+    }
+
     const query = `
-      SELECT id, name_en, name_ta, unit_type, selling_price, current_stock, barcode
+      SELECT id, name_en, name_ta, category_id, unit_type, selling_price, current_stock, barcode, gst_rate
       FROM products 
-      WHERE (name_en ILIKE $1 OR name_ta ILIKE $1 OR barcode ILIKE $1) AND is_active = true
+      WHERE ${where.join(' AND ')}
       LIMIT 20
     `;
-    const result = await pool.query(query, [`%${q}%`]);
+    const result = await pool.query(query, params);
     res.json(result.rows);
   } catch (error) {
     next(error);
@@ -78,15 +90,23 @@ export const createProduct = async (req: Request, res: Response, next: NextFunct
   try {
     await client.query('BEGIN');
     const { 
-      category_id, name_en, name_ta, barcode, unit_type, 
-      purchase_price, selling_price, initial_stock, min_stock_alert, gst_rate 
+      category_id, category, name_en, name_ta, barcode, unit_type, unit,
+      purchase_price, selling_price, initial_stock, opening_stock, min_stock_alert, gst_rate 
     } = req.body;
+
+    const actual_category_id = category_id || category || null;
+    const actual_unit_type = unit_type || unit || 'pcs';
+    const actual_initial_stock = initial_stock !== undefined ? initial_stock : (opening_stock || 0);
+
+    if (!name_en) {
+      return res.status(400).json({ success: false, message: 'Product name is required' });
+    }
 
     const productResult = await client.query(
       `INSERT INTO products 
        (category_id, name_en, name_ta, barcode, unit_type, purchase_price, selling_price, current_stock, min_stock_alert, gst_rate) 
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
-      [category_id || null, name_en, name_ta, barcode, unit_type, purchase_price || 0, selling_price || 0, initial_stock || 0, min_stock_alert || 5, gst_rate || 0]
+      [actual_category_id, name_en, name_ta, barcode, actual_unit_type, purchase_price || 0, selling_price || 0, actual_initial_stock, min_stock_alert || 5, gst_rate || 0]
     );
 
     const product = productResult.rows[0];
@@ -149,7 +169,7 @@ export const deleteProduct = async (req: Request, res: Response, next: NextFunct
     if (result.rowCount === 0) {
       return res.status(404).json({ message: 'Product not found' });
     }
-    res.json({ message: 'Product deactivated successfully' });
+    res.json(result.rows[0]);
   } catch (error) {
     next(error);
   }
