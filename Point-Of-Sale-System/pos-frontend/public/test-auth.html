@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head><title>Auth Injector</title></head>
+<body>
+<script>
+  // Injected by e2e test runner — sets Zustand persist state then redirects
+  const params = new URLSearchParams(location.search);
+  const user = JSON.parse(decodeURIComponent(params.get('user') || '{}'));
+  const token = params.get('token') || '';
+  const redirect = params.get('redirect') || '/owner';
+  const lang = params.get('lang') || 'en';
+
+  // Set auth storage (Zustand persist format)
+  localStorage.setItem('auth-storage', JSON.stringify({ state: { user, accessToken: token }, version: 0 }));
+
+  // Set language preference — LanguageContext reads from 'app_language'
+  if (lang !== 'en') {
+    localStorage.setItem('app_language', lang.toUpperCase());
+  }
+
+  // Redirect immediately
+  location.href = redirect;
+</script>
+<p>Setting auth state and redirecting...</p>
+</body>
+</html>

@@ -26,25 +26,25 @@ args = "Start application"
 name = "Backend API"
 author = "agent"
 
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "cd Point-Of-Sale-System/backend && node -r dotenv/config dist/index.js dotenv_config_path=.env"
-waitForPort = 3001
-
 [workflows.workflow.metadata]
 outputType = "console"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "cd Point-Of-Sale-System/backend && node dist/index.js"
+waitForPort = 3001
 
 [[workflows.workflow]]
 name = "Start application"
 author = "agent"
 
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "cd Point-Of-Sale-System && npm run dev --prefix pos-frontend"
-waitForPort = 5000
-
 [workflows.workflow.metadata]
 outputType = "webview"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "cd Point-Of-Sale-System/pos-frontend && npm run dev"
+waitForPort = 5000
 
 [[ports]]
 localPort = 3001

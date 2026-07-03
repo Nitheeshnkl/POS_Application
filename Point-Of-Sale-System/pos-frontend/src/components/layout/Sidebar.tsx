@@ -46,7 +46,7 @@ const Sidebar: React.FC = () => {
     { to: '/cashier', icon: <Receipt size={20} />, label: t('billing'), end: true },
     { to: '/cashier/my-bills', icon: <History size={20} />, label: t('myBills') },
     { to: '/cashier/stock-view', icon: <Package size={20} />, label: t('stockView') },
-    { to: '/cashier/notes', icon: <StickyNote size={20} />, label: t('notes') },
+    { to: '/cashier/notes', icon: <FileText size={20} />, label: t('notes') },
   ];
 
   const links = user?.role === 'owner' ? ownerLinks : cashierLinks;
