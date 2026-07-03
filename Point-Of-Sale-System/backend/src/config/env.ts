@@ -21,5 +21,7 @@ export const env = {
   PGPASSWORD: process.env.PGPASSWORD,
   JWT_ACCESS_SECRET: required('JWT_ACCESS_SECRET'),
   JWT_REFRESH_SECRET: required('JWT_REFRESH_SECRET'),
-  CORS_ORIGIN: process.env.CORS_ORIGIN || 'http://localhost:5173',
+  JWT_EXPIRES: process.env.JWT_EXPIRES || '15m',
+  FRONTEND_URL: process.env.FRONTEND_URL || '',
+  CORS_ORIGIN: process.env.CORS_ORIGIN || (process.env.NODE_ENV === 'production' ? '' : 'http://127.0.0.1:5173'),
 };

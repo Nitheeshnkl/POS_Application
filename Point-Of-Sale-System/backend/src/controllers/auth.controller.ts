@@ -4,6 +4,17 @@ import jwt from 'jsonwebtoken';
 import pool from '../config/db.js';
 import { env } from '../config/env.js';
 
+const isProduction = env.NODE_ENV === 'production';
+const sameSite: 'none' | 'lax' = isProduction ? 'none' : 'lax';
+const refreshCookieOptions = {
+  httpOnly: true,
+  secure: isProduction,
+  sameSite,
+  path: '/',
+  maxAge: 7 * 24 * 60 * 60 * 1000,
+  domain: undefined as undefined,
+};
+
 export const setupRequired = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { rows } = await pool.query('SELECT COUNT(*) FROM users');
@@ -82,7 +93,7 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
     const accessToken = jwt.sign(
       { id: user.id, role: user.role },
       env.JWT_ACCESS_SECRET,
-      { expiresIn: '15m' }
+      { expiresIn: env.JWT_EXPIRES as any }
     );
 
     const refreshToken = jwt.sign(
@@ -91,13 +102,7 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
       { expiresIn: '7d' }
     );
 
-    res.cookie('refreshToken', refreshToken, {
-      httpOnly: true,
-      secure: env.NODE_ENV === 'production',
-      // cross-domain (Render backend + Vercel frontend) requires SameSite=None in production
-      sameSite: env.NODE_ENV === 'production' ? 'none' : 'strict',
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-    });
+    res.cookie('refreshToken', refreshToken, refreshCookieOptions);
 
     const { password: _, ...userWithoutPassword } = user;
     res.json({ user: userWithoutPassword, accessToken });
@@ -124,7 +129,7 @@ export const refresh = async (req: Request, res: Response, next: NextFunction) =
     const accessToken = jwt.sign(
       { id: user.id, role: user.role },
       env.JWT_ACCESS_SECRET,
-      { expiresIn: '15m' }
+      { expiresIn: env.JWT_EXPIRES as any }
     );
 
     res.json({ accessToken });
@@ -134,7 +139,7 @@ export const refresh = async (req: Request, res: Response, next: NextFunction) =
 };
 
 export const logout = (req: Request, res: Response) => {
-  res.clearCookie('refreshToken');
+  res.clearCookie('refreshToken', refreshCookieOptions);
   res.json({ message: 'Logged out' });
 };
 

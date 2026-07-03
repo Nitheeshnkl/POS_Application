@@ -7,14 +7,48 @@ import { logger } from '../utils/logger.js';
 
 const { Pool } = pg;
 
+const isProduction = env.NODE_ENV === 'production';
+const isLocalHost = (value?: string) => {
+  if (!value) {
+    return true;
+  }
+
+  try {
+    const { hostname } = new URL(value);
+    return ['127.0.0.1', '::1', '0.0.0.0'].includes(hostname);
+  } catch {
+    return false;
+  }
+};
+
+const shouldUseSsl = (() => {
+  if (!isProduction) {
+    return false;
+  }
+
+  if (env.DATABASE_URL) {
+    return !isLocalHost(env.DATABASE_URL);
+  }
+
+  if (env.PGHOST) {
+    return !isLocalHost(`postgres://${env.PGHOST}`);
+  }
+
+  return false;
+})();
+
 const pool = env.DATABASE_URL
-  ? new Pool({ connectionString: env.DATABASE_URL })
+  ? new Pool({
+      connectionString: env.DATABASE_URL,
+      ssl: shouldUseSsl ? { rejectUnauthorized: false } : undefined,
+    })
   : new Pool({
       host: env.PGHOST,
       port: env.PGPORT ? parseInt(env.PGPORT, 10) : undefined,
       database: env.PGDATABASE,
       user: env.PGUSER,
       password: env.PGPASSWORD,
+      ssl: shouldUseSsl ? { rejectUnauthorized: false } : undefined,
     });
 
 pool.on('error', (err) => {

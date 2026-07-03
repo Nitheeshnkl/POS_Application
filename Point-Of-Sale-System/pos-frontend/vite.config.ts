@@ -10,7 +10,7 @@ export default defineConfig({
     allowedHosts: true,
     proxy: {
       '/api/v1': {
-        target: process.env.VITE_DEV_API || 'http://localhost:3001',
+        target: process.env.VITE_DEV_API || 'http://127.0.0.1:3001',
         changeOrigin: true,
       },
     },

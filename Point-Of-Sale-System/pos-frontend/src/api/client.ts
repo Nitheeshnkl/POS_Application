@@ -2,8 +2,10 @@ import axios from 'axios';
 import camelcaseKeys from 'camelcase-keys';
 import { useAuthStore } from '../store/authStore';
 
+const apiBaseUrl = import.meta.env.VITE_API_URL || '/api/v1';
+
 const apiClient = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || '/api/v1',
+  baseURL: apiBaseUrl,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -39,7 +41,7 @@ apiClient.interceptors.response.use(
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
       try {
-        const { data } = await axios.post('/api/v1/auth/refresh', {}, { withCredentials: true });
+        const { data } = await apiClient.post('/auth/refresh', {}, { withCredentials: true });
         const { accessToken } = data;
         useAuthStore.getState().setAuth(useAuthStore.getState().user!, accessToken);
         originalRequest.headers.Authorization = `Bearer ${accessToken}`;

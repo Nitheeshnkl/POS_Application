@@ -1,6 +1,9 @@
 .DS_Store
 .env
 .env.*
+!.env.example
+!backend/.env.example
+!pos-frontend/.env.example
 node_modules
 dist
 build

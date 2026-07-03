@@ -4,6 +4,7 @@ import helmet from 'helmet';
 import compression from 'compression';
 import cookieParser from 'cookie-parser';
 import rateLimit from 'express-rate-limit';
+import type { Server } from 'http';
 
 import { env } from './config/env.js';
 import pool, { runMigrations } from './config/db.js';
@@ -28,13 +29,25 @@ import suppliersRoutes from './routes/suppliers.routes.js';
 import usersRoutes from './routes/users.routes.js';
 
 const app = express();
+const allowedOrigins = [env.CORS_ORIGIN, env.FRONTEND_URL]
+  .filter(Boolean)
+  .join(',')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
 
 app.set('trust proxy', 1);
 
 app.use(helmet());
 app.use(
   cors({
-    origin: env.CORS_ORIGIN,
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin) || env.NODE_ENV !== 'production') {
+        callback(null, true);
+        return;
+      }
+      callback(new Error('Not allowed by CORS'));
+    },
     credentials: true,
   })
 );
@@ -63,8 +76,22 @@ app.use(cookieParser());
 app.use(express.json({ limit: '5mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-app.get('/api/v1/health', (_req, res) => {
-  res.json({ status: 'ok' });
+app.get('/health', async (_req, res) => {
+  try {
+    await pool.query('SELECT 1');
+    res.json({ status: 'ok', db: 'connected', env: env.NODE_ENV });
+  } catch (error: any) {
+    res.status(503).json({ status: 'ok', db: 'disconnected', env: env.NODE_ENV, error: error.message });
+  }
+});
+
+app.get('/api/v1/health', async (_req, res) => {
+  try {
+    await pool.query('SELECT 1');
+    res.json({ status: 'ok', db: 'connected', env: env.NODE_ENV });
+  } catch (error: any) {
+    res.status(503).json({ status: 'ok', db: 'disconnected', env: env.NODE_ENV, error: error.message });
+  }
 });
 
 app.use('/api/v1/auth', authLimiter, authRoutes);
@@ -94,11 +121,22 @@ async function start() {
     logger.info('Database migrations applied.');
   } catch (error: any) {
     logger.error(`Startup database error: ${error.message}`);
+    process.exit(1);
   }
 
-  app.listen(env.PORT, '0.0.0.0', () => {
+  const server: Server = app.listen(env.PORT, '0.0.0.0', () => {
     logger.info(`Backend server listening on port ${env.PORT}`);
   });
+
+  const shutdown = (signal: NodeJS.Signals) => {
+    logger.info(`Received ${signal}, shutting down gracefully.`);
+    server.close(() => {
+      pool.end().finally(() => process.exit(0));
+    });
+  };
+
+  process.on('SIGTERM', shutdown);
+  process.on('SIGINT', shutdown);
 }
 
 start();
