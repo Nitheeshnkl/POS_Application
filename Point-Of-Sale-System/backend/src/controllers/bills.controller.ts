@@ -143,15 +143,17 @@ export const createBill = async (req: Request, res: Response, next: NextFunction
     );
 
     const bill = billResult.rows[0];
+    const savedItems: any[] = [];
 
     for (const item of items) {
       const isCustom = item.product_id === 'CUSTOM' || !item.product_id;
       const dbProductId = isCustom ? null : item.product_id;
-      
-      await client.query(
-        'INSERT INTO bill_items (bill_id, product_id, product_name_en, quantity, unit_price, gst_rate, line_total) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+
+      const itemResult = await client.query(
+        'INSERT INTO bill_items (bill_id, product_id, product_name_en, quantity, unit_price, gst_rate, line_total) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
         [bill.id, dbProductId, item.name_en, item.quantity, item.unit_price, item.gst_rate, item.line_total]
       );
+      savedItems.push(itemResult.rows[0]);
 
       if (dbProductId) {
         const stockUpdateResult = await client.query(
@@ -188,6 +190,7 @@ export const createBill = async (req: Request, res: Response, next: NextFunction
     );
 
     await client.query('COMMIT');
+    bill.items = savedItems;
     res.status(201).json(bill);
   } catch (error) {
     await client.query('ROLLBACK');

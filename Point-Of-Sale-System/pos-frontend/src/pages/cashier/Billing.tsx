@@ -158,7 +158,21 @@ const Billing: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['bills'] });
 
       if (print) {
-        printReceipt(savedBill);
+        printReceipt(savedBill, {
+          storeName: t('storeName' as any) || 'SRI MURUGAN STORE',
+          receipt: t('receipts'),
+          date: t('date'),
+          item: t('item' as any) || 'Item',
+          qty: t('quantity'),
+          price: t('price'),
+          total: t('total'),
+          subTotal: t('subTotal'),
+          gst: t('gst' as any) || 'GST',
+          discount: t('discount'),
+          grandTotal: t('total'),
+          thankYou: t('thankYouVisitAgain' as any) || 'Thank you! Visit Again',
+          popupBlocked: t('popupBlocked' as any) || 'Unable to open the print window. Please allow pop-ups for this site and try again.',
+        });
       }
 
       toast.success(`Bill #${savedBill.billNumber} saved!`, { id: toastId });
