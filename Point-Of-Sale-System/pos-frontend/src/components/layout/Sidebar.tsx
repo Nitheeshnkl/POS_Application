@@ -14,6 +14,7 @@ import {
   Truck,
   DollarSign,
   BookOpen,
+  FileText,
 } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { useLanguage } from '../../i18n/LanguageContext';
@@ -32,8 +33,8 @@ const Sidebar: React.FC = () => {
     { to: '/owner/stock-movements', icon: <History size={20} />, label: t('stockHistory') },
     { to: '/owner/expenses', icon: <TrendingUp size={20} />, label: t('expenses') },
     { to: '/owner/reports', icon: <BookOpen size={20} />, label: t('reports') },
-    { to: '/owner/export-center', icon: <BookOpen size={20} />, label: 'Export Center' },
-    { to: '/owner/requested-products', icon: <ClipboardList size={20} />, label: t('requestedProducts') || 'Requested Products' },
+    { to: '/owner/export-center', icon: <BookOpen size={20} />, label: t('exportCenter') },
+    { to: '/owner/notes', icon: <FileText size={20} />, label: t('notes') },
     { to: '/owner/cashout', icon: <DollarSign size={20} />, label: t('cashDrawer') },
     { to: '/owner/cashout-history', icon: <DollarSign size={20} />, label: t('cashoutHistory') },
     { to: '/owner/cashiers', icon: <Users size={20} />, label: t('cashiers') },
@@ -45,6 +46,7 @@ const Sidebar: React.FC = () => {
     { to: '/cashier', icon: <Receipt size={20} />, label: t('billing'), end: true },
     { to: '/cashier/my-bills', icon: <History size={20} />, label: t('myBills') },
     { to: '/cashier/stock-view', icon: <Package size={20} />, label: t('stockView') },
+    { to: '/cashier/notes', icon: <StickyNote size={20} />, label: t('notes') },
   ];
 
   const links = user?.role === 'owner' ? ownerLinks : cashierLinks;

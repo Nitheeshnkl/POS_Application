@@ -55,44 +55,48 @@ const App: React.FC = () => {
         <Toaster position="top-right" toastOptions={{ duration: 4000 }} />
         <BrowserRouter>
           <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route path="/setup" element={setupRequired ? <Setup /> : <Navigate to="/login" />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/setup" element={setupRequired ? <Setup /> : <Navigate to="/login" />} />
 
-          <Route path="/owner" element={<OwnerRoute><OwnerLayout /></OwnerRoute>}>
-            <Route index element={<Dashboard />} />
-            <Route path="billing" element={<Billing />} />
-            <Route path="products" element={<Products />} />
-            <Route path="categories" element={<Categories />} />
-            <Route path="purchases" element={<Purchases />} />
-            <Route path="stock-movements" element={<StockMovements />} />
-            <Route path="expenses" element={<Expenses />} />
-            <Route path="reports" element={<Reports />} />
-          <Route path="credits" element={<CreditManagement />} />
-            <Route path="cashiers" element={<Cashiers />} />
-            <Route path="audit-logs" element={<AuditLogs />} />
-            <Route path="settings" element={<Settings />} />
-            <Route path="export-center" element={<ExportCenter />} />
-            <Route path="suppliers" element={<Suppliers />} />
-            <Route path="cashout" element={<Cashout />} />
-            <Route path="cashout-history" element={<CashoutHistory />} />
-            <Route path="requested-products" element={<RequestedProducts />} />
-          </Route>
+            <Route path="/owner" element={<OwnerRoute><OwnerLayout /></OwnerRoute>}>
+              <Route index element={<Dashboard />} />
+              <Route path="billing" element={<Billing />} />
+              <Route path="products" element={<Products />} />
+              <Route path="categories" element={<Categories />} />
+              <Route path="purchases" element={<Purchases />} />
+              <Route path="stock-movements" element={<StockMovements />} />
+              <Route path="expenses" element={<Expenses />} />
+              <Route path="reports" element={<Reports />} />
+              <Route path="credits" element={<CreditManagement />} />
+              <Route path="cashiers" element={<Cashiers />} />
+              <Route path="audit-logs" element={<AuditLogs />} />
+              <Route path="settings" element={<Settings />} />
+              <Route path="export-center" element={<ExportCenter />} />
+              <Route path="suppliers" element={<Suppliers />} />
+              <Route path="cashout" element={<Cashout />} />
+              <Route path="cashout-history" element={<CashoutHistory />} />
+              {/* Notes (customer requested products) — also served at /owner/notes */}
+              <Route path="notes" element={<RequestedProducts />} />
+              <Route path="requested-products" element={<RequestedProducts />} />
+            </Route>
 
-          <Route path="/cashier" element={<CashierRoute><CashierLayout /></CashierRoute>}>
-            <Route index element={<Billing />} />
-            <Route path="billing" element={<Billing />} />
-            <Route path="my-bills" element={<MyBills />} />
-            <Route path="stock-view" element={<StockView />} />
-          </Route>
+            <Route path="/cashier" element={<CashierRoute><CashierLayout /></CashierRoute>}>
+              <Route index element={<Billing />} />
+              <Route path="billing" element={<Billing />} />
+              <Route path="my-bills" element={<MyBills />} />
+              <Route path="stock-view" element={<StockView />} />
+              {/* Notes page accessible by cashiers */}
+              <Route path="notes" element={<RequestedProducts />} />
+            </Route>
 
-          <Route path="/" element={
-            setupRequired ? <Navigate to="/setup" /> :
-            user ? <Navigate to={user.role === 'owner' ? '/owner' : '/cashier'} /> :
-            <Navigate to="/login" />
-          } />
-        </Routes>
-      </BrowserRouter>
-    </QueryClientProvider>
+            <Route path="/" element={
+              setupRequired ? <Navigate to="/setup" /> :
+              user ? <Navigate to={user.role === 'owner' ? '/owner' : '/cashier'} /> :
+              <Navigate to="/login" />
+            } />
+          </Routes>
+        </BrowserRouter>
+      </QueryClientProvider>
     </LanguageProvider>
   );
 };

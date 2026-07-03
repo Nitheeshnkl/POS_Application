@@ -8,6 +8,7 @@
     "dev": "nodemon --exec 'node --loader ts-node/esm' src/index.ts",
     "build": "tsc && mkdir -p dist/db/migrations && cp -r src/db/migrations/*.sql dist/db/migrations/",
     "migrate": "node --loader ts-node/esm src/scripts/migrate.ts",
+    "seed": "node --loader ts-node/esm src/scripts/seed.ts",
     "test-cashdrawer-final": "node ../scripts/test-cashdrawer-final.cjs"
   },
   "dependencies": {

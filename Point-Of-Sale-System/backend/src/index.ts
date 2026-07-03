@@ -3,6 +3,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
 import cookieParser from 'cookie-parser';
+import rateLimit from 'express-rate-limit';
 
 import { env } from './config/env.js';
 import pool, { runMigrations } from './config/db.js';
@@ -37,6 +38,26 @@ app.use(
     credentials: true,
   })
 );
+
+// Global rate limiter — 300 requests per minute per IP
+const globalLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: 'Too many requests. Please slow down.' },
+});
+
+// Stricter limiter for auth endpoints to prevent brute-force
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: 'Too many login attempts. Please try again later.' },
+});
+
+app.use(globalLimiter);
 app.use(compression());
 app.use(cookieParser());
 app.use(express.json({ limit: '5mb' }));
@@ -46,7 +67,7 @@ app.get('/api/v1/health', (_req, res) => {
   res.json({ status: 'ok' });
 });
 
-app.use('/api/v1/auth', authRoutes);
+app.use('/api/v1/auth', authLimiter, authRoutes);
 app.use('/api/v1/bills', billsRoutes);
 app.use('/api/v1/cashout', cashoutRoutes);
 app.use('/api/v1/categories', categoriesRoutes);

@@ -44,7 +44,17 @@ export const printReceipt = async (bill: Bill, labels: Partial<ReceiptLabels> = 
     return;
   }
 
-  const items = bill.items ?? [];
+  const rawItems: any[] = (bill as any).items ?? [];
+
+  // Normalise item fields: the bill returned from the API has snake_case
+  // keys converted to camelCase (quantity, lineTotal) while store-built
+  // BillItem objects use qty and total. Support both shapes.
+  const items = rawItems.map((item: any) => ({
+    name:      item.productNameEn ?? item.product_name_en ?? '',
+    qty:       item.qty        ?? item.quantity  ?? 0,
+    unitPrice: item.unitPrice  ?? item.unit_price ?? 0,
+    lineTotal: item.total      ?? item.lineTotal  ?? item.line_total ?? 0,
+  }));
 
   const html = `
     <html>
@@ -79,10 +89,10 @@ export const printReceipt = async (bill: Bill, labels: Partial<ReceiptLabels> = 
           <tbody>
             ${items.length > 0 ? items.map(item => `
               <tr>
-                <td>${item.productNameEn}</td>
+                <td>${item.name}</td>
                 <td align="right">${item.qty}</td>
                 <td align="right">${formatCurrency(item.unitPrice)}</td>
-                <td align="right">${formatCurrency(item.total)}</td>
+                <td align="right">${formatCurrency(item.lineTotal)}</td>
               </tr>
             `).join('') : `<tr><td colspan="4" align="center">-</td></tr>`}
           </tbody>
@@ -111,21 +121,15 @@ export const printReceipt = async (bill: Bill, labels: Partial<ReceiptLabels> = 
     if (closed) return;
     closed = true;
     try {
-      if (!printWindow.closed) {
-        printWindow.close();
-      }
+      if (!printWindow.closed) printWindow.close();
     } catch {
       // window may already be gone
     }
-    try {
-      window.focus();
-    } catch {
-      // ignore
-    }
+    try { window.focus(); } catch { /* ignore */ }
   };
 
   printWindow.onload = () => {
-    // Give the browser a tick to lay out the receipt before printing.
+    // Give browser a tick to lay out the receipt before printing.
     setTimeout(() => {
       try {
         printWindow.focus();
@@ -135,22 +139,21 @@ export const printReceipt = async (bill: Bill, labels: Partial<ReceiptLabels> = 
         return;
       }
 
-      // onafterprint fires whether the user prints or cancels in most
-      // browsers, but not reliably in all of them, so we also watch the
-      // print media query and fall back to a hard timeout.
+      // onafterprint fires whether the user prints or cancels in most browsers.
+      // matchMedia('print') is a belt-and-suspenders fallback.
       try {
         printWindow.onafterprint = closeOnce;
-        const mediaQueryList = printWindow.matchMedia('print');
-        mediaQueryList.addEventListener?.('change', (mql: MediaQueryListEvent) => {
-          if (!mql.matches) closeOnce();
+        const mql = printWindow.matchMedia('print');
+        mql.addEventListener?.('change', (e: MediaQueryListEvent) => {
+          if (!e.matches) closeOnce();
         });
       } catch {
         // matchMedia/onafterprint unsupported — rely on the timeout below.
       }
 
-      // Hard safety net: always return control to the app even if the
-      // print dialog is cancelled and no browser event ever fires.
-      setTimeout(closeOnce, 60000);
+      // Safety net: auto-close after 5 s if no browser event fires
+      // (covers cases where the user cancels the dialog in non-standard environments).
+      setTimeout(closeOnce, 5000);
     }, 250);
   };
 };

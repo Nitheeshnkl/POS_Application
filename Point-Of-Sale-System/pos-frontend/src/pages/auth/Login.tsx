@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
 import { login } from '../../api/auth';
+import { useLanguage } from '../../i18n/LanguageContext';
 
 export default function Login() {
   const [username, setUsername] = useState('');
@@ -10,12 +11,13 @@ export default function Login() {
   const [loading, setLoading]   = useState(false);
   const setAuth   = useAuthStore(s => s.setAuth);
   const navigate  = useNavigate();
+  const { t }     = useLanguage();
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
     if (!username.trim() || !password.trim()) {
-      setError('Enter username and password');
+      setError(t('enterUsernameAndPassword'));
       return;
     }
     setLoading(true);
@@ -24,7 +26,7 @@ export default function Login() {
       setAuth(data.user, data.accessToken);
       navigate(data.user.role === 'owner' ? '/owner' : '/cashier');
     } catch (err: any) {
-      setError(err?.response?.data?.message || 'Invalid username or password');
+      setError(err?.response?.data?.message || t('invalidUsernameOrPassword'));
     } finally {
       setLoading(false);
     }
@@ -49,10 +51,10 @@ export default function Login() {
             fontSize: '24px', color: '#fff', marginBottom: '12px'
           }}>ம</div>
           <h1 style={{ margin: 0, fontSize: '18px', fontWeight: 600, color: '#111' }}>
-            Sri Murugan Store
+            {t('storeName')}
           </h1>
           <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#888' }}>
-            Sign in to continue
+            {t('signInToContinue')}
           </p>
         </div>
 
@@ -67,13 +69,13 @@ export default function Login() {
         <form onSubmit={handleSubmit}>
           <div style={{ marginBottom: '14px' }}>
             <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, color: '#333', marginBottom: '6px' }}>
-              Username
+              {t('username')}
             </label>
             <input
               type="text"
               value={username}
               onChange={e => setUsername(e.target.value)}
-              placeholder="Enter your username"
+              placeholder={t('enterYourUsername')}
               autoFocus
               style={{
                 width: '100%', boxSizing: 'border-box',
@@ -88,13 +90,13 @@ export default function Login() {
 
           <div style={{ marginBottom: '20px' }}>
             <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, color: '#333', marginBottom: '6px' }}>
-              Password
+              {t('password')}
             </label>
             <input
               type="password"
               value={password}
               onChange={e => setPassword(e.target.value)}
-              placeholder="Enter your password"
+              placeholder={t('enterYourPassword')}
               style={{
                 width: '100%', boxSizing: 'border-box',
                 border: '1px solid #d1d5db', borderRadius: '6px',
@@ -116,12 +118,12 @@ export default function Login() {
               fontSize: '14px', fontWeight: 500, cursor: loading ? 'not-allowed' : 'pointer'
             }}
           >
-            {loading ? 'Signing in…' : 'Sign in'}
+            {loading ? t('signingIn') : t('signIn')}
           </button>
         </form>
 
         <p style={{ textAlign: 'center', fontSize: '12px', color: '#aaa', marginTop: '20px', marginBottom: 0 }}>
-          Sri Murugan Store Management System
+          {t('storeManagementSystem')}
         </p>
       </div>
     </div>

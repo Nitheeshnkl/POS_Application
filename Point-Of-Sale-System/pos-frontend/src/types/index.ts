@@ -43,10 +43,13 @@ export interface BillItem {
   productId: string;
   productNameEn: string;
   productNameTa: string;
+  // Store / cart items use qty + total; DB-fetched items use quantity + lineTotal
   qty: number;
+  quantity?: number;
   unitPrice: number;
   gstRate: number;
   total: number;
+  lineTotal?: number;
 }
 
 export interface Bill {

@@ -1,19 +1,21 @@
 import api from './client';
 
+// NOTE: all field names are camelCase because the API client transforms
+// snake_case → camelCase on every response (see api/client.ts).
 export interface CashoutRecord {
   id: number | null;
-  cashout_date: string;
-  opening_cash: number;
-  cash_sales: number;
-  gpay_sales: number;
+  cashoutDate: string;
+  openingCash: number;
+  cashSales: number;
+  gpaySales: number;
   expenses: number;
-  expected_cash: number;
-  actual_cash: number | null;
-  actual_gpay: number | null;
+  expectedCash: number;
+  actualCash: number | null;
+  actualGpay: number | null;
   difference: number | null;
-  gpay_difference: number | null;
+  gpayDifference: number | null;
   notes: string;
-  opened_by_name?: string;
+  openedByName?: string;
 }
 
 export const getCurrentDrawer = async (): Promise<CashoutRecord> => {
@@ -34,7 +36,7 @@ export const saveCashout = async (data: {
 
 export const editCashout = async (
   id: number,
-  data: { opening_cash?: number; actual_cash?: number; notes?: string }
+  data: { opening_cash?: number; actual_cash?: number; actual_gpay?: number; notes?: string }
 ): Promise<CashoutRecord> => {
   const res = await api.put(`/cashout/${id}`, data);
   return res.data?.data ?? null;
