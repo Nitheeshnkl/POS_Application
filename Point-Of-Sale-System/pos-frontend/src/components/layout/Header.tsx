@@ -14,7 +14,7 @@ const Header: React.FC = () => {
   const { data: notifications } = useQuery({
     queryKey: ['notifications'],
     queryFn: getNotifications,
-    enabled: !!user
+    enabled: !!user && showNotifications
   });
 
   const markReadMutation = useMutation({

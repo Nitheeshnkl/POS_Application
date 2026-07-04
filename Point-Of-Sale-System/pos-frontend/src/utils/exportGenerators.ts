@@ -1,7 +1,3 @@
-import * as XLSX from 'xlsx';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
-
 const formatTitle = (type: string, startDate?: string, endDate?: string) => {
   let title = `${type.toUpperCase()} REPORT`;
   if (startDate && endDate) {
@@ -43,51 +39,54 @@ export const exportToCSV = (data: any[], type: string, _startDate?: string, _end
 // Excel Export
 export const exportToExcel = (data: any[], type: string, _startDate?: string, _endDate?: string) => {
   if (data.length === 0) return;
-  const ws = XLSX.utils.json_to_sheet(data);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Export");
-  
-  const fileName = `${type}_export_${new Date().toISOString().split('T')[0]}.xlsx`;
-  XLSX.writeFile(wb, fileName);
+
+  void import('xlsx').then(({ utils, writeFile }) => {
+    const ws = utils.json_to_sheet(data);
+    const wb = utils.book_new();
+    utils.book_append_sheet(wb, ws, 'Export');
+
+    const fileName = `${type}_export_${new Date().toISOString().split('T')[0]}.xlsx`;
+    writeFile(wb, fileName);
+  });
 };
 
 // PDF Export
 export const exportToPDF = (data: any[], type: string, startDate?: string, endDate?: string) => {
   if (data.length === 0) return;
-  
-  const doc = new jsPDF('landscape');
-  const title = formatTitle(type, startDate, endDate);
-  
-  doc.setFontSize(16);
-  doc.text(title, 14, 15);
-  
-  const headers = Object.keys(data[0]);
-  const rows = data.map(row => headers.map(h => {
-    let val = row[h];
-    // try formatting dates or numbers if needed
-    if (val !== null && val !== undefined) {
-      if (typeof val === 'number') {
-        // format numbers vaguely nicely, maybe preserve decimals
-        val = val.toString(); 
+
+  void Promise.all([import('jspdf'), import('jspdf-autotable')]).then(([{ default: jsPDF }, { default: autoTable }]) => {
+    const doc = new jsPDF('landscape');
+    const title = formatTitle(type, startDate, endDate);
+
+    doc.setFontSize(16);
+    doc.text(title, 14, 15);
+
+    const headers = Object.keys(data[0]);
+    const rows = data.map(row => headers.map(h => {
+      let val = row[h];
+      if (val !== null && val !== undefined) {
+        if (typeof val === 'number') {
+          val = val.toString();
+        } else {
+          val = String(val);
+        }
       } else {
-        val = String(val);
+        val = '-';
       }
-    } else {
-      val = '-';
-    }
-    return val;
-  }));
+      return val;
+    }));
 
-  autoTable(doc, {
-    head: [headers],
-    body: rows,
-    startY: 25,
-    theme: 'grid',
-    styles: { fontSize: 8 },
-    headStyles: { fillColor: [41, 128, 185] },
+    autoTable(doc, {
+      head: [headers],
+      body: rows,
+      startY: 25,
+      theme: 'grid',
+      styles: { fontSize: 8 },
+      headStyles: { fillColor: [41, 128, 185] },
+    });
+
+    doc.save(`${type}_export_${new Date().toISOString().split('T')[0]}.pdf`);
   });
-
-  doc.save(`${type}_export_${new Date().toISOString().split('T')[0]}.pdf`);
 };
 
 export const handleMobileShare = async (data: any[], type: string, format: 'csv' | 'excel' | 'pdf') => {

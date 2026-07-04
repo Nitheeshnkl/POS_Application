@@ -29,6 +29,8 @@ import suppliersRoutes from './routes/suppliers.routes.js';
 import usersRoutes from './routes/users.routes.js';
 
 const app = express();
+app.disable('x-powered-by');
+app.set('etag', 'weak');
 const allowedOrigins = [env.CORS_ORIGIN, env.FRONTEND_URL]
   .filter(Boolean)
   .join(',')
@@ -71,7 +73,11 @@ const authLimiter = rateLimit({
 });
 
 app.use(globalLimiter);
-app.use(compression());
+app.use(compression({ threshold: 1024 }));
+app.use((req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  next();
+});
 app.use(cookieParser());
 app.use(express.json({ limit: '5mb' }));
 app.use(express.urlencoded({ extended: true }));

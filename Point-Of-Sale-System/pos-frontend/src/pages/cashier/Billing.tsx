@@ -193,10 +193,10 @@ const Billing: React.FC = () => {
   return (
     <>
       <Toaster position="top-right" />
-      <div className="flex flex-col md:flex-row h-[calc(100vh-4rem)]">
-        <div className="w-full md:w-2/3 flex flex-col h-[50vh] md:h-full bg-slate-50 border-b md:border-b-0 md:border-r border-slate-200">
-          <div className="bg-white p-4 rounded-lg shadow flex justify-between items-center">
-            <div style={{ display: 'flex', gap: '8px' }}>
+      <div className="flex flex-col min-h-[calc(100vh-4rem)] overflow-hidden md:flex-row md:h-[calc(100vh-4rem)]">
+        <div className="w-full flex flex-col min-h-0 overflow-hidden bg-slate-50 border-b md:w-2/3 md:h-full md:border-b-0 md:border-r border-slate-200">
+          <div className="bg-white p-4 rounded-lg shadow flex flex-col gap-2 md:flex-row md:justify-between md:items-center">
+            <div className="flex flex-wrap gap-2 w-full md:w-auto">
               {(['browse', 'search'] as const).map(tab => (
                 <button
                   key={tab}
@@ -264,7 +264,7 @@ const Billing: React.FC = () => {
             )
           )}
 
-            <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 overflow-y-auto max-h-[60vh]">
+            <div className="mt-4 grid flex-1 min-h-0 grid-cols-1 gap-2 overflow-y-auto pb-4 sm:grid-cols-2 md:grid-cols-3">
               {displayProducts.map((prod) => (
                 <button
                   key={prod.id}
@@ -291,7 +291,7 @@ const Billing: React.FC = () => {
             </div>
         </div>
 
-        <div className="w-full md:w-1/3 flex flex-col h-[50vh] md:h-full bg-white relative">
+        <div className="w-full flex flex-col min-h-0 overflow-hidden bg-white md:w-1/3 md:h-full relative">
           <div className="p-4 border-b border-slate-200 bg-white sticky top-0 z-10 flex justify-between items-center">
             <h2 className="text-lg font-bold text-slate-800">Current Bill</h2>
             <Button variant="outline" size="sm" onClick={() => setShowCustomerModal(true)}>
@@ -299,7 +299,7 @@ const Billing: React.FC = () => {
             </Button>
           </div>
 
-            <div className="flex-1 overflow-y-auto mb-4 min-h-[300px]">
+            <div className="flex-1 overflow-y-auto mb-4 min-h-0">
               {items.length === 0 ? (
                 <div className="text-center text-gray-400 mt-10">Cart is empty</div>
               ) : (

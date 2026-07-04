@@ -22,10 +22,6 @@ const isLocalHost = (value?: string) => {
 };
 
 const shouldUseSsl = (() => {
-  if (!isProduction) {
-    return false;
-  }
-
   if (env.DATABASE_URL) {
     return !isLocalHost(env.DATABASE_URL);
   }
@@ -37,8 +33,10 @@ const shouldUseSsl = (() => {
   return false;
 })();
 
+
+
 const pool = env.DATABASE_URL
-  ? new Pool({
+? new Pool({
       connectionString: env.DATABASE_URL,
       ssl: shouldUseSsl ? { rejectUnauthorized: false } : undefined,
     })
@@ -54,7 +52,6 @@ const pool = env.DATABASE_URL
 pool.on('error', (err) => {
   logger.error('Unexpected error on idle database client', err.message);
 });
-
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 

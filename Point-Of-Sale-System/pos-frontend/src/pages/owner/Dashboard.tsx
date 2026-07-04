@@ -200,11 +200,11 @@ const colorMap: Record<string, string> = {
   purple: 'border-purple-500',
 };
 
-const MetricCard = ({ title, value, color = 'blue' }: { title: string; value: string | number; color?: string }) => (
+const MetricCard = React.memo(({ title, value, color = 'blue' }: { title: string; value: string | number; color?: string }) => (
   <div className={`bg-white p-6 rounded-lg shadow border-l-4 ${colorMap[color] || 'border-blue-500'}`}>
     <h3 className="text-sm font-medium text-gray-500 uppercase tracking-wider">{title}</h3>
     <p className="mt-2 text-3xl font-bold text-gray-900">{value}</p>
   </div>
-);
+));
 
 export default Dashboard;

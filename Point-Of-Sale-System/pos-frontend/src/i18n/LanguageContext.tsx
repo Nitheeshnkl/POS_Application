@@ -22,26 +22,6 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (saved === 'EN' || saved === 'TA') {
       setLanguage(saved);
     }
-    // Also fetch from db if logged in
-    const authStore = localStorage.getItem('auth-storage');
-    if (authStore) {
-      try {
-        const token = JSON.parse(authStore).state?.accessToken;
-        if (token) {
-          fetch(`${import.meta.env.VITE_API_URL || '/api/v1'}/settings`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-          })
-            .then(res => res.json())
-            .then(data => {
-              if (data.language && (data.language === 'EN' || data.language === 'TA')) {
-                setLanguage(data.language);
-                localStorage.setItem('app_language', data.language);
-              }
-            })
-            .catch(() => {});
-        }
-      } catch (e) {}
-    }
   }, []);
 
   const handleSetLanguage = (lang: Language) => {

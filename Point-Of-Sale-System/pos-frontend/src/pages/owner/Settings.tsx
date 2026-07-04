@@ -20,8 +20,12 @@ const Settings: React.FC = () => {
   useEffect(() => {
     if (settings) {
       setFormData(settings);
+      const storedLanguage = localStorage.getItem('app_language');
+      if (storedLanguage === 'EN' || storedLanguage === 'TA') {
+        setLanguage(storedLanguage);
+      }
     }
-  }, [settings]);
+  }, [settings, setLanguage]);
 
   useEffect(() => {
     setSelectedLang(language);
