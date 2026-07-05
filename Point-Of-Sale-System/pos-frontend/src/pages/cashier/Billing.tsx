@@ -123,7 +123,7 @@ const Billing: React.FC = () => {
 
   const subtotal = items.reduce((sum, item) => sum + item.total, 0);
   const gst = items.reduce(
-    (sum, i) => sum + (i.unitPrice * i.qty * (i.gstRate ?? 0)) / 100,
+    (sum, i) => sum + (i.total * (i.gstRate ?? 0)) / 100,
     0
   );
   const total = subtotal + gst;
@@ -142,8 +142,13 @@ const Billing: React.FC = () => {
         payment_mode: mode,
         override_credit: overrideCredit,
         items: items.map((item) => ({
-          product_id: item.productId,
+          product_id: item.isCustom ? null : item.productId,
+          name_en: item.productNameEn,
           quantity: item.qty,
+          unit_price: item.unitPrice,
+          gst_rate: item.gstRate || 0,
+          discount: item.discount || 0,
+          line_total: item.total + (item.total * (item.gstRate || 0)) / 100,
         })),
         discount_total: 0,
       };
@@ -259,7 +264,10 @@ const Billing: React.FC = () => {
             productTab === 'search' && searchQuery.length >= 2 && searchResults.length === 0 && !isSearching && (
               <div className="mt-4 p-4 border-2 border-dashed rounded text-center">
                 <p className="text-gray-500 mb-2">No products found</p>
-                <Button onClick={() => setShowManualModal(true)}>+ Add New Product</Button>
+                <div className="flex flex-col justify-center gap-2 sm:flex-row">
+                  <Button onClick={() => setShowManualModal(true)}>+ Add Product</Button>
+                  <Button variant="outline" onClick={() => setShowOtherModal(true)}>Quick Bill</Button>
+                </div>
               </div>
             )
           )}
@@ -314,28 +322,32 @@ const Billing: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {items.map((item) => (
-                      <tr key={item.productId} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                    {items.map((item) => {
+                      const itemKey = item.productId ?? item.id ?? item.productNameEn;
+                      return (
+                      <tr key={itemKey} style={{ borderBottom: '1px solid #f3f4f6' }}>
                         <td style={{ padding: '8px 10px' }}>
                           <div className="font-medium text-slate-800 text-sm">
                             {language === 'TA' ? item.productNameTa || item.productNameEn : item.productNameEn}
                           </div>
+                          {item.isCustom && <div style={{ fontSize: '11px', color: '#64748b' }}>Quick Bill</div>}
                           {item.gstRate > 0 && <div style={{ fontSize: '11px', color: '#2563eb' }}>GST {item.gstRate}%</div>}
+                          {(item.discount || 0) > 0 && <div style={{ fontSize: '11px', color: '#b45309' }}>Discount {formatCurrency(item.discount || 0)}</div>}
                         </td>
                         <td style={{ padding: '8px 10px' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                             <button
-                              onClick={() => updateQty(item.productId, item.qty - 1)}
+                              onClick={() => updateQty(itemKey, item.qty - 1)}
                               style={{ width: '26px', height: '26px', border: '1px solid #d1d5db', borderRadius: '4px', background: '#fff', cursor: 'pointer', fontSize: '14px', color: '#374151', lineHeight: 1 }}
                             >−</button>
                             <input
                               type="number" min="1"
                               value={item.qty}
-                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateQty(item.productId, Math.max(1, Number(e.target.value)))}
+                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateQty(itemKey, Math.max(1, Number(e.target.value)))}
                               style={{ width: '44px', textAlign: 'center', border: '1px solid #d1d5db', borderRadius: '4px', padding: '3px 4px', fontSize: '13px', color: '#111827', background: '#fff' }}
                             />
                             <button
-                              onClick={() => updateQty(item.productId, item.qty + 1)}
+                              onClick={() => updateQty(itemKey, item.qty + 1)}
                               style={{ width: '26px', height: '26px', border: '1px solid #d1d5db', borderRadius: '4px', background: '#fff', cursor: 'pointer', fontSize: '14px', color: '#374151', lineHeight: 1 }}
                             >+</button>
                           </div>
@@ -344,7 +356,7 @@ const Billing: React.FC = () => {
                           <input
                             type="number"
                             value={item.unitPrice}
-                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => updatePrice(item.productId, Number(e.target.value))}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => updatePrice(itemKey, Number(e.target.value))}
                             style={{ width: '72px', border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px 6px', fontSize: '13px', color: '#111827', background: '#fff' }}
                           />
                         </td>
@@ -353,12 +365,13 @@ const Billing: React.FC = () => {
                         </td>
                         <td style={{ padding: '8px 10px' }}>
                           <button
-                            onClick={() => removeItem(item.productId)}
+                            onClick={() => removeItem(itemKey)}
                             style={{ border: 'none', background: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '16px', padding: '2px 6px' }}
                           >🗑</button>
                         </td>
                       </tr>
-                    ))}
+                    );
+                    })}
                   </tbody>
                 </table>
               )}
@@ -613,17 +626,24 @@ const Billing: React.FC = () => {
         <OtherItemModal
           isOpen={showOtherModal}
           onClose={() => setShowOtherModal(false)}
+          initialName={searchQuery.trim() || 'Other'}
           onSubmit={(data) => {
+            const taxableAmount = Math.max(0, data.qty * data.price - data.discount);
             addItem({
-              productId: 'CUSTOM',
+              id: `quick-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+              productId: null,
               productNameEn: data.name,
               productNameTa: data.name,
+              isCustom: true,
               qty: data.qty,
               unitPrice: data.price,
-              gstRate: 0,
-              total: data.qty * data.price
+              gstRate: data.tax,
+              discount: data.discount,
+              total: taxableAmount
             });
             setShowOtherModal(false);
+            setSearchQuery('');
+            searchInputRef.current?.focus();
           }}
         />
     </>

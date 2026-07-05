@@ -2,6 +2,8 @@ import { Request, Response, NextFunction } from 'express';
 import pool from '../config/db.js';
 import { generateBillNumber } from '../utils/billNumber.js';
 
+const isCustomBillItem = (item: any) => !item.product_id || item.product_id === 'CUSTOM';
+
 export const getBills = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { start_date, end_date, cashier_id, payment_mode } = req.query;
@@ -64,7 +66,34 @@ export const createBill = async (req: Request, res: Response, next: NextFunction
     let subtotal = 0;
     let gst_total = 0;
 
+    if (!Array.isArray(items) || items.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ message: 'Bill must contain at least one item' });
+    }
+
     for (const item of items) {
+      const quantity = Number(item.quantity);
+      if (!Number.isFinite(quantity) || quantity <= 0) {
+        throw new Error('Invalid item quantity');
+      }
+
+      if (isCustomBillItem(item)) {
+        const unit_price = Number(item.unit_price || 0);
+        const gst_rate = Number(item.gst_rate || 0);
+        const discount = Number(item.discount || 0);
+        const item_subtotal = Math.max(0, unit_price * quantity - discount);
+        const item_gst = (item_subtotal * gst_rate) / 100;
+
+        item.name_en = item.name_en?.trim() || 'Other';
+        item.unit_price = unit_price;
+        item.gst_rate = gst_rate;
+        item.line_total = item_subtotal + item_gst;
+
+        subtotal += item_subtotal;
+        gst_total += item_gst;
+        continue;
+      }
+
       const productResult = await client.query(
         'SELECT name_en, selling_price, gst_rate, current_stock, min_stock_alert FROM products WHERE id = $1',
         [item.product_id]
@@ -74,11 +103,11 @@ export const createBill = async (req: Request, res: Response, next: NextFunction
       }
       const product = productResult.rows[0];
 
-      if (Number(product.current_stock) < Number(item.quantity)) {
+      if (Number(product.current_stock) < quantity) {
         throw new Error(`Insufficient stock for ${product.name_en}. Available: ${product.current_stock}`);
       }
 
-      const item_subtotal = Number(product.selling_price) * Number(item.quantity);
+      const item_subtotal = Number(product.selling_price) * quantity;
       const item_gst = (item_subtotal * Number(product.gst_rate)) / 100;
 
       subtotal += item_subtotal;
@@ -108,6 +137,7 @@ export const createBill = async (req: Request, res: Response, next: NextFunction
       
       const { credit_limit: cLimit, credit_used: cUsed } = custRes.rows[0];
       if (Number(cUsed) + grand_total > Number(cLimit) && !override_credit) {
+        await client.query('ROLLBACK');
         return res.status(400).json({ message: 'Customer credit limit exceeded' });
       }
 
@@ -117,6 +147,7 @@ export const createBill = async (req: Request, res: Response, next: NextFunction
         if (cashRes.rows.length > 0) {
           const { credit_limit: uLimit, credit_used: uUsed } = cashRes.rows[0];
           if (Number(uUsed) + grand_total > Number(uLimit) && !override_credit) {
+            await client.query('ROLLBACK');
             return res.status(400).json({ message: 'Cashier credit limit exceeded' });
           }
           // Update cashier credit used
@@ -146,7 +177,7 @@ export const createBill = async (req: Request, res: Response, next: NextFunction
     const savedItems: any[] = [];
 
     for (const item of items) {
-      const isCustom = item.product_id === 'CUSTOM' || !item.product_id;
+      const isCustom = isCustomBillItem(item);
       const dbProductId = isCustom ? null : item.product_id;
 
       const itemResult = await client.query(
@@ -241,6 +272,10 @@ export const cancelBill = async (req: Request, res: Response, next: NextFunction
 
     const itemsResult = await client.query('SELECT * FROM bill_items WHERE bill_id = $1', [id]);
     for (const item of itemsResult.rows) {
+      if (!item.product_id) {
+        continue;
+      }
+
       const stockUpdateResult = await client.query(
         'UPDATE products SET current_stock = current_stock + $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING current_stock',
         [item.quantity, item.product_id]

@@ -1,6 +1,14 @@
 import { Request, Response, NextFunction } from 'express';
 import pool from '../config/db.js';
 
+const normalizeBarcode = (barcode: unknown) => {
+  if (typeof barcode !== 'string') {
+    return barcode ?? null;
+  }
+  const trimmed = barcode.trim();
+  return trimmed.length > 0 ? trimmed : null;
+};
+
 export const getAllProducts = async (req: Request, res: Response, next: NextFunction) => {
   const { q, category_id, is_active } = req.query;
   const params: any[] = [];
@@ -97,16 +105,29 @@ export const createProduct = async (req: Request, res: Response, next: NextFunct
     const actual_category_id = category_id || category || null;
     const actual_unit_type = unit_type || unit || 'pcs';
     const actual_initial_stock = initial_stock !== undefined ? initial_stock : (opening_stock || 0);
+    const normalized_barcode = normalizeBarcode(barcode);
 
     if (!name_en) {
+      await client.query('ROLLBACK');
       return res.status(400).json({ success: false, message: 'Product name is required' });
+    }
+
+    if (normalized_barcode) {
+      const duplicate = await client.query(
+        'SELECT id FROM products WHERE barcode = $1 LIMIT 1',
+        [normalized_barcode]
+      );
+      if (duplicate.rowCount && duplicate.rowCount > 0) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ success: false, message: 'Another product already uses this barcode.' });
+      }
     }
 
     const productResult = await client.query(
       `INSERT INTO products 
        (category_id, name_en, name_ta, barcode, unit_type, purchase_price, selling_price, current_stock, min_stock_alert, gst_rate) 
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
-      [actual_category_id, name_en, name_ta, barcode, actual_unit_type, purchase_price || 0, selling_price || 0, actual_initial_stock, min_stock_alert || 5, gst_rate || 0]
+      [actual_category_id, name_en, name_ta, normalized_barcode, actual_unit_type, purchase_price || 0, selling_price || 0, actual_initial_stock, min_stock_alert || 5, gst_rate || 0]
     );
 
     const product = productResult.rows[0];
@@ -136,8 +157,24 @@ export const updateProduct = async (req: Request, res: Response, next: NextFunct
     category_id, name_en, name_ta, barcode, unit_type, 
     purchase_price, selling_price, min_stock_alert, gst_rate, is_active 
   } = req.body;
+  const normalized_barcode = normalizeBarcode(barcode);
 
   try {
+    const existing = await pool.query('SELECT id FROM products WHERE id = $1', [id]);
+    if (existing.rowCount === 0) {
+      return res.status(404).json({ message: 'Product not found' });
+    }
+
+    if (normalized_barcode) {
+      const duplicate = await pool.query(
+        'SELECT id FROM products WHERE barcode = $1 AND id <> $2 LIMIT 1',
+        [normalized_barcode, id]
+      );
+      if (duplicate.rowCount && duplicate.rowCount > 0) {
+        return res.status(400).json({ success: false, message: 'Another product already uses this barcode.' });
+      }
+    }
+
     // Note: Only owner should update price edits according to details, 
     // but the roleGuard will handle that in routes if we separate it.
     // For now, let's just do a single update.
@@ -145,9 +182,9 @@ export const updateProduct = async (req: Request, res: Response, next: NextFunct
       `UPDATE products 
        SET category_id = $1, name_en = $2, name_ta = $3, barcode = $4, unit_type = $5, 
            purchase_price = $6, selling_price = $7, min_stock_alert = $8, gst_rate = $9, 
-           is_active = $10, updated_at = CURRENT_TIMESTAMP
+           is_active = COALESCE($10, is_active), updated_at = CURRENT_TIMESTAMP
        WHERE id = $11 RETURNING *`,
-      [category_id || null, name_en, name_ta, barcode, unit_type, purchase_price, selling_price, min_stock_alert, gst_rate, is_active, id]
+      [category_id || null, name_en, name_ta, normalized_barcode, unit_type, purchase_price, selling_price, min_stock_alert, gst_rate, is_active, id]
     );
 
     if (result.rowCount === 0) {

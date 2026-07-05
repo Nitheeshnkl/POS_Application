@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getProducts, createProduct, updateProduct, deleteProduct } from '../../api/products';
+import { getProducts, getProduct, createProduct, updateProduct, deleteProduct } from '../../api/products';
 import { getCategories } from '../../api/categories';
 import { Table } from '../../components/ui/Table';
 import { Button } from '../../components/ui/Button';
@@ -19,6 +19,7 @@ const Products: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [isLoadingProduct, setIsLoadingProduct] = useState(false);
 
   const [formData, setFormData] = useState({
     nameEn: '',
@@ -48,6 +49,9 @@ const Products: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['products'] });
       handleCloseModal();
     },
+    onError: (error: any) => {
+      window.alert(error?.response?.data?.message || 'Unable to save product');
+    },
   });
 
   const updateMutation = useMutation({
@@ -55,6 +59,9 @@ const Products: React.FC = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['products'] });
       handleCloseModal();
+    },
+    onError: (error: any) => {
+      window.alert(error?.response?.data?.message || 'Unable to update product');
     },
   });
 
@@ -65,20 +72,34 @@ const Products: React.FC = () => {
     },
   });
 
-  const handleOpenModal = (product?: Product) => {
+  const populateForm = (product: Product) => {
+    setFormData({
+      nameEn: product.nameEn || '',
+      nameTa: product.nameTa || '',
+      categoryId: product.categoryId || '',
+      barcode: product.barcode || '',
+      unitType: product.unitType || 'pcs',
+      purchasePrice: Number(product.purchasePrice || 0),
+      sellingPrice: Number(product.sellingPrice || 0),
+      minStockAlert: Number(product.minStockAlert || 5),
+      initialStock: 0,
+    });
+  };
+
+  const handleOpenModal = async (product?: Product) => {
     if (product) {
-      setEditingProduct(product);
-      setFormData({
-        nameEn: product.nameEn,
-        nameTa: product.nameTa,
-        categoryId: product.categoryId,
-        barcode: product.barcode || '',
-        unitType: product.unitType,
-        purchasePrice: product.purchasePrice,
-        sellingPrice: product.sellingPrice,
-        minStockAlert: product.minStockAlert,
-        initialStock: 0,
-      });
+      setIsModalOpen(true);
+      setIsLoadingProduct(true);
+      try {
+        const selectedProduct = await getProduct(product.id);
+        setEditingProduct(selectedProduct);
+        populateForm(selectedProduct);
+      } catch (error: any) {
+        setIsModalOpen(false);
+        window.alert(error?.response?.data?.message || 'Unable to load product for editing');
+      } finally {
+        setIsLoadingProduct(false);
+      }
     } else {
       setEditingProduct(null);
       setFormData({
@@ -92,8 +113,8 @@ const Products: React.FC = () => {
         minStockAlert: 5,
         initialStock: 0,
       });
+      setIsModalOpen(true);
     }
-    setIsModalOpen(true);
   };
 
   const handleCloseModal = () => {
@@ -104,7 +125,7 @@ const Products: React.FC = () => {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (editingProduct) {
-      updateMutation.mutate({ id: editingProduct.id, ...formData });
+      updateMutation.mutate({ id: editingProduct.id, ...formData, isActive: editingProduct.isActive });
     } else {
       createMutation.mutate(formData);
     }
@@ -154,7 +175,7 @@ const Products: React.FC = () => {
       header: 'Actions',
       accessor: (p: Product) => (
         <div className="flex space-x-2">
-          <Button variant="ghost" size="sm" onClick={() => handleOpenModal(p)}>
+          <Button variant="ghost" size="sm" onClick={() => { void handleOpenModal(p); }}>
             <Edit2 size={16} />
           </Button>
           <Button
@@ -185,7 +206,7 @@ const Products: React.FC = () => {
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
-          <Button onClick={() => handleOpenModal()}>
+          <Button onClick={() => { void handleOpenModal(); }}>
             <Plus size={20} className="mr-2" />
             Add Product
           </Button>
@@ -210,12 +231,15 @@ const Products: React.FC = () => {
             <Button variant="outline" onClick={handleCloseModal}>
               Cancel
             </Button>
-            <Button onClick={handleSubmit} isLoading={createMutation.isPending || updateMutation.isPending}>
+            <Button onClick={handleSubmit} disabled={isLoadingProduct} isLoading={createMutation.isPending || updateMutation.isPending}>
               {editingProduct ? t('update') : t('save')}
             </Button>
           </div>
         }
       >
+        {isLoadingProduct ? (
+          <div className="py-8 text-center text-sm text-slate-500">Loading product...</div>
+        ) : (
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <Input
@@ -298,6 +322,7 @@ const Products: React.FC = () => {
             />
           )}
         </form>
+        )}
       </Modal>
     </div>
   );

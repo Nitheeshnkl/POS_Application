@@ -1,6 +1,7 @@
-import axios from 'axios';
+import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 import camelcaseKeys from 'camelcase-keys';
 import { useAuthStore } from '../store/authStore';
+import snakecaseKeys from 'snakecase-keys';
 
 const apiBaseUrl = import.meta.env.VITE_API_URL || '/api/v1';
 
@@ -12,7 +13,19 @@ const apiClient = axios.create({
   withCredentials: true,
 });
 
-import snakecaseKeys from 'snakecase-keys';
+const refreshClient = axios.create({
+  baseURL: apiBaseUrl,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  withCredentials: true,
+});
+
+let refreshPromise: Promise<string> | null = null;
+
+type RetriableRequestConfig = InternalAxiosRequestConfig & {
+  _retry?: boolean;
+};
 
 apiClient.interceptors.request.use((config) => {
   const { accessToken } = useAuthStore.getState();
@@ -37,19 +50,39 @@ apiClient.interceptors.response.use(
     return response;
   },
   async (error) => {
-    const originalRequest = error.config;
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    const originalRequest = error.config as RetriableRequestConfig | undefined;
+    const requestUrl = originalRequest?.url || '';
+    if (
+      error.response?.status === 401 &&
+      originalRequest &&
+      !originalRequest._retry &&
+      !requestUrl.includes('/auth/login') &&
+      !requestUrl.includes('/auth/refresh')
+    ) {
       originalRequest._retry = true;
       try {
-        const { data } = await apiClient.post('/auth/refresh', {}, { withCredentials: true });
-        const { accessToken } = data;
-        useAuthStore.getState().setAuth(useAuthStore.getState().user!, accessToken);
+        if (!refreshPromise) {
+          refreshPromise = refreshClient
+            .post('/auth/refresh')
+            .then(({ data }) => {
+              const responseData = data && typeof data === 'object'
+                ? camelcaseKeys(data, { deep: true })
+                : data;
+              return responseData.accessToken as string;
+            })
+            .finally(() => {
+              refreshPromise = null;
+            });
+        }
+
+        const accessToken = await refreshPromise;
+        useAuthStore.getState().setAccessToken(accessToken);
         originalRequest.headers.Authorization = `Bearer ${accessToken}`;
         return apiClient(originalRequest);
       } catch (refreshError) {
         useAuthStore.getState().clearAuth();
         window.location.href = '/login';
-        return Promise.reject(refreshError);
+        return Promise.reject(refreshError as AxiosError);
       }
     }
     return Promise.reject(error);

@@ -40,14 +40,16 @@ export interface Product {
 export interface BillItem {
   id?: string;
   billId?: string;
-  productId: string;
+  productId: string | null;
   productNameEn: string;
   productNameTa: string;
+  isCustom?: boolean;
   // Store / cart items use qty + total; DB-fetched items use quantity + lineTotal
   qty: number;
   quantity?: number;
   unitPrice: number;
   gstRate: number;
+  discount?: number;
   total: number;
   lineTotal?: number;
 }

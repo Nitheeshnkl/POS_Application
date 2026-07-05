@@ -1,6 +1,10 @@
 import { create } from 'zustand';
 import { BillItem } from '../types';
 
+const getItemKey = (item: BillItem) => item.productId ?? item.id;
+const calculateItemTotal = (item: Pick<BillItem, 'qty' | 'unitPrice' | 'discount'>) =>
+  Math.max(0, item.qty * item.unitPrice - (item.discount || 0));
+
 interface BillState {
   items: BillItem[];
   customer: { id?: string; name: string; phone: string; isCredit: boolean } | null;
@@ -17,12 +21,15 @@ export const useBillStore = create<BillState>((set) => ({
   customer: null,
   addItem: (newItem) =>
     set((state) => {
-      const existing = state.items.find((i) => i.productId === newItem.productId);
+      const newItemKey = getItemKey(newItem);
+      const existing = newItemKey
+        ? state.items.find((i) => getItemKey(i) === newItemKey)
+        : undefined;
       if (existing) {
         return {
           items: state.items.map((i) =>
-            i.productId === newItem.productId
-              ? { ...i, qty: i.qty + newItem.qty, total: (i.qty + newItem.qty) * i.unitPrice }
+            getItemKey(i) === newItemKey
+              ? { ...i, qty: i.qty + newItem.qty, total: calculateItemTotal({ ...i, qty: i.qty + newItem.qty }) }
               : i
           ),
         };
@@ -32,20 +39,20 @@ export const useBillStore = create<BillState>((set) => ({
   updateQty: (productId, qty) =>
     set((state) => ({
       items: qty <= 0
-        ? state.items.filter((i) => i.productId !== productId)
+        ? state.items.filter((i) => getItemKey(i) !== productId)
         : state.items.map((i) =>
-            i.productId === productId ? { ...i, qty, total: qty * i.unitPrice } : i
+            getItemKey(i) === productId ? { ...i, qty, total: calculateItemTotal({ ...i, qty }) } : i
           ),
     })),
   updatePrice: (productId, price) =>
     set((state) => ({
       items: state.items.map((i) =>
-        i.productId === productId ? { ...i, unitPrice: price, total: price * i.qty } : i
+        getItemKey(i) === productId ? { ...i, unitPrice: price, total: calculateItemTotal({ ...i, unitPrice: price }) } : i
       ),
     })),
   removeItem: (productId) =>
     set((state) => ({
-      items: state.items.filter((i) => i.productId !== productId),
+      items: state.items.filter((i) => getItemKey(i) !== productId),
     })),
   clearBill: () => set({ items: [], customer: null }),
   setCustomer: (customer) => set({ customer }),
