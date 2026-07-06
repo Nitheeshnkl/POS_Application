@@ -55,6 +55,7 @@ WHERE id NOT IN (
 DO $$
 BEGIN
     IF NOT EXISTS (
+        SELECT 1
         FROM pg_constraint
         WHERE conname = 'categories_name_en_unique'
           AND conrelid = 'categories'::regclass
@@ -64,7 +65,6 @@ BEGIN
             UNIQUE (name_en);
     END IF;
 END
-$$;
 
 -- -----------------------------------------------------------------------------
 -- Step 4: Re-seed default categories.
