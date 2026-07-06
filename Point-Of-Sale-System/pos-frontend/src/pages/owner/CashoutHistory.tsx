@@ -10,7 +10,21 @@ import toast from 'react-hot-toast';
 
 const ROWS_PER_PAGE = 15;
 
-// ── component ────────────────────────────────────────────────────────────────
+// ── status helpers ─────────────────────────────────────────────────────────────
+const statusLabel = (diff: number | null): string => {
+  if (diff === null) return '—';
+  if (diff === 0)    return 'Balanced';
+  if (diff > 0)      return `Excess ₹${Math.abs(diff).toFixed(2)}`;
+  return `Shortage ₹${Math.abs(diff).toFixed(2)}`;
+};
+const statusColor = (diff: number | null): string => {
+  if (diff === null) return 'text-slate-400';
+  if (diff === 0)    return 'text-green-600 font-semibold';
+  if (diff > 0)      return 'text-blue-600 font-semibold';
+  return 'text-red-600 font-semibold';
+};
+
+// ── component ──────────────────────────────────────────────────────────────────
 const CashoutHistory: React.FC = () => {
   const queryClient = useQueryClient();
   const { t } = useLanguage();
@@ -24,9 +38,10 @@ const CashoutHistory: React.FC = () => {
   });
 
   const [page, setPage] = useState(1);
-  const [isModalOpen, setIsModalOpen]     = useState(false);
-  const [selected, setSelected]           = useState<CashoutRecord | null>(null);
-  const [editForm, setEditForm]           = useState({ openingCash: '', actualCash: '', actualGpay: '', notes: '' });
+  const [isModalOpen, setIsModalOpen]   = useState(false);
+  const [selected, setSelected]         = useState<CashoutRecord | null>(null);
+  // Edit form — only actual_cash, actual_gpay, notes are editable (snapshot fields are immutable)
+  const [editForm, setEditForm] = useState({ actualCash: '', actualGpay: '', notes: '' });
 
   const editMutation = useMutation({
     mutationFn: (payload: any) => editCashout(selected!.id as number, payload),
@@ -45,7 +60,6 @@ const CashoutHistory: React.FC = () => {
   const openEdit = (row: CashoutRecord) => {
     setSelected(row);
     setEditForm({
-      openingCash: row.openingCash != null ? String(row.openingCash) : '0',
       actualCash:  row.actualCash  != null ? String(row.actualCash)  : '',
       actualGpay:  row.actualGpay  != null ? String(row.actualGpay)  : '',
       notes:       row.notes || '',
@@ -55,11 +69,15 @@ const CashoutHistory: React.FC = () => {
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
-    const actualVal   = parseFloat(editForm.actualCash);
-    const openingVal  = parseFloat(editForm.openingCash) || 0;
-    const gpayVal     = editForm.actualGpay !== '' ? parseFloat(editForm.actualGpay) : undefined;
+    const actualVal  = parseFloat(editForm.actualCash);
+    const gpayVal    = editForm.actualGpay !== '' ? parseFloat(editForm.actualGpay) : undefined;
     if (isNaN(actualVal) || actualVal < 0) { toast.error(t('enterValidActualCash')); return; }
-    editMutation.mutate({ opening_cash: openingVal, actual_cash: actualVal, actual_gpay: gpayVal, notes: editForm.notes });
+    // Send only editable fields — snapshot fields (opening_cash, expected_total) are immutable
+    editMutation.mutate({
+      actual_cash: actualVal,
+      actual_gpay: gpayVal,
+      notes:       editForm.notes,
+    });
   };
 
   // ── Loading ──
@@ -94,11 +112,6 @@ const CashoutHistory: React.FC = () => {
   const totalPages = Math.ceil(rows.length / ROWS_PER_PAGE);
   const paged = rows.slice((page - 1) * ROWS_PER_PAGE, page * ROWS_PER_PAGE);
 
-  const diffColor = (diff: number | null) =>
-    diff == null ? 'text-slate-400' : diff >= 0 ? 'text-green-600' : 'text-red-600';
-  const diffLabel = (diff: number | null) =>
-    diff == null ? '—' : `${diff >= 0 ? '+' : ''}${formatCurrency(diff)}`;
-
   return (
     <div className="p-4 md:p-6">
       <h1 className="text-2xl font-bold mb-6">{t('cashoutHistory')}</h1>
@@ -106,10 +119,19 @@ const CashoutHistory: React.FC = () => {
       {/* ── Desktop table ── */}
       <div className="hidden md:block bg-white rounded-lg shadow overflow-hidden mb-4">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[900px]">
+          <table className="w-full text-sm min-w-[800px]">
             <thead className="bg-slate-50 border-b">
               <tr>
-                {[t('date'), t('openedBy'), t('opening'), t('cashSales'), t('gpay'), t('expenses'), t('expected'), t('actual'), t('difference'), t('notes'), ''].map(h => (
+                {[
+                  t('date'),
+                  t('openedBy'),
+                  t('opening'),
+                  t('expectedTotal'),
+                  t('actualTotal'),
+                  t('statusLabel'),
+                  t('notes'),
+                  '',
+                ].map(h => (
                   <th key={h} className="px-3 py-3 text-left font-semibold text-slate-600 whitespace-nowrap">{h}</th>
                 ))}
               </tr>
@@ -117,17 +139,25 @@ const CashoutHistory: React.FC = () => {
             <tbody className="divide-y divide-slate-100">
               {paged.map((row) => {
                 const diff = row.difference != null ? Number(row.difference) : null;
+                // Actual total: computed from stored actual_cash + actual_gpay
+                const actTotal = (Number(row.actualCash ?? 0)) + (Number(row.actualGpay ?? 0));
                 return (
                   <tr key={row.id} className="hover:bg-slate-50 transition-colors">
                     <td className="px-3 py-3 whitespace-nowrap">{formatDateOnly(row.cashoutDate)}</td>
                     <td className="px-3 py-3">{row.openedByName || '—'}</td>
                     <td className="px-3 py-3 font-medium">{formatCurrency(Number(row.openingCash) || 0)}</td>
-                    <td className="px-3 py-3 text-green-600">{formatCurrency(Number(row.cashSales) || 0)}</td>
-                    <td className="px-3 py-3 text-blue-600">{formatCurrency(Number(row.gpaySales) || 0)}</td>
-                    <td className="px-3 py-3 text-red-600">{formatCurrency(Number(row.expenses) || 0)}</td>
-                    <td className="px-3 py-3 text-blue-700 font-medium">{formatCurrency(Number(row.expectedCash) || 0)}</td>
-                    <td className="px-3 py-3 font-medium">{row.actualCash != null ? formatCurrency(Number(row.actualCash)) : '—'}</td>
-                    <td className={`px-3 py-3 font-bold ${diffColor(diff)}`}>{diffLabel(diff)}</td>
+                    {/* Expected Total — from stored DB snapshot; — if pre-migration record */}
+                    <td className="px-3 py-3 text-blue-700 font-medium">
+                      {row.expectedTotal != null ? formatCurrency(Number(row.expectedTotal)) : '—'}
+                    </td>
+                    {/* Actual Total — computed from stored actual_cash + actual_gpay */}
+                    <td className="px-3 py-3 font-medium">
+                      {row.actualCash != null ? formatCurrency(actTotal) : '—'}
+                    </td>
+                    {/* Status — derived from stored difference */}
+                    <td className={`px-3 py-3 ${statusColor(diff)}`}>
+                      {statusLabel(diff)}
+                    </td>
                     <td className="px-3 py-3 text-slate-500 max-w-[120px] truncate">{row.notes || '—'}</td>
                     <td className="px-3 py-3">
                       <Button size="sm" variant="secondary" onClick={() => openEdit(row)}>{t('edit')}</Button>
@@ -144,6 +174,7 @@ const CashoutHistory: React.FC = () => {
       <div className="md:hidden space-y-3 mb-4">
         {paged.map((row) => {
           const diff = row.difference != null ? Number(row.difference) : null;
+          const actTotal = (Number(row.actualCash ?? 0)) + (Number(row.actualGpay ?? 0));
           return (
             <div key={row.id} className="bg-white rounded-lg shadow p-4 space-y-2">
               <div className="flex justify-between items-center border-b pb-2">
@@ -151,12 +182,9 @@ const CashoutHistory: React.FC = () => {
                 <span className="text-xs text-slate-500">{row.openedByName || '—'}</span>
               </div>
               {[
-                { label: t('opening'),   value: formatCurrency(Number(row.openingCash) || 0) },
-                { label: t('cashSales'), value: formatCurrency(Number(row.cashSales) || 0),   color: 'text-green-600' },
-                { label: t('gpay'),      value: formatCurrency(Number(row.gpaySales) || 0),   color: 'text-blue-600' },
-                { label: t('expenses'),  value: formatCurrency(Number(row.expenses) || 0),     color: 'text-red-600' },
-                { label: t('expected'),  value: formatCurrency(Number(row.expectedCash) || 0), color: 'text-blue-700 font-bold' },
-                { label: t('actual'),    value: row.actualCash != null ? formatCurrency(Number(row.actualCash)) : '—' },
+                { label: t('opening'),       value: formatCurrency(Number(row.openingCash) || 0) },
+                { label: t('expectedTotal'), value: row.expectedTotal != null ? formatCurrency(Number(row.expectedTotal)) : '—', color: 'text-blue-700' },
+                { label: t('actualTotal'),   value: row.actualCash != null ? formatCurrency(actTotal) : '—' },
               ].map(({ label, value, color = '' }) => (
                 <div key={label} className="flex justify-between text-sm">
                   <span className="text-slate-500">{label}</span>
@@ -164,8 +192,8 @@ const CashoutHistory: React.FC = () => {
                 </div>
               ))}
               <div className="flex justify-between text-sm">
-                <span className="text-slate-500">{t('difference')}</span>
-                <span className={`font-bold ${diffColor(diff)}`}>{diffLabel(diff)}</span>
+                <span className="text-slate-500">{t('statusLabel')}</span>
+                <span className={statusColor(diff)}>{statusLabel(diff)}</span>
               </div>
               {row.notes && <p className="text-xs text-slate-400 italic">{row.notes}</p>}
               <Button size="sm" className="w-full mt-1" variant="secondary" onClick={() => openEdit(row)}>
@@ -192,17 +220,16 @@ const CashoutHistory: React.FC = () => {
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
             <h2 className="text-lg font-semibold mb-1">{t('editCashout')}</h2>
-            <p className="text-sm text-slate-500 mb-4">
-              {formatDateOnly(selected.cashoutDate)} ·
-              {t('expected')}: {formatCurrency(Number(selected.expectedCash) || 0)}
+            <p className="text-sm text-slate-500 mb-1">
+              {formatDateOnly(selected.cashoutDate)}
             </p>
+            {/* Show immutable snapshot values for reference */}
+            {selected.expectedTotal != null && (
+              <p className="text-sm text-blue-700 font-medium mb-4">
+                {t('expectedTotal')}: {formatCurrency(Number(selected.expectedTotal))}
+              </p>
+            )}
             <form onSubmit={handleSave} className="space-y-4">
-              <Input
-                label={t('openingCash') + ' (₹)'}
-                type="number" min="0" step="0.01"
-                value={editForm.openingCash}
-                onChange={(e: any) => setEditForm({ ...editForm, openingCash: e.target.value })}
-              />
               <Input
                 label={t('actualCashLabel')}
                 type="number" min="0" step="0.01"

@@ -144,6 +144,13 @@ export const ta = {
   "cashoutUpdated": "பணப்பெட்டி புதுப்பிக்கப்பட்டது",
   "failedToUpdate": "புதுப்பிப்பதில் தோல்வி",
 
+  "expectedTotal": "Expected Total",
+  "actualTotal":   "Actual Total",
+  "balanced":      "Balanced",
+  "shortage":      "Shortage",
+  "excess":        "Excess",
+  "statusLabel":   "Status",
+
   "currentBill": "தற்போதைய பில்",
   "cartEmpty": "கார்ட் காலியாக உள்ளது",
   "addCustomer": "வாடிக்கையாளரை சேர்",

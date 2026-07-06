@@ -18,6 +18,20 @@ const InfoRow: React.FC<{ label: string; value: string; color?: string; bold?: b
   </div>
 );
 
+// ── status helpers ────────────────────────────────────────────────────────────
+const statusLabel = (diff: number | null): string => {
+  if (diff === null) return '—';
+  if (diff === 0)    return 'Balanced';
+  if (diff > 0)      return `Excess ₹${Math.abs(diff).toFixed(2)}`;
+  return `Shortage ₹${Math.abs(diff).toFixed(2)}`;
+};
+const statusColor = (diff: number | null): string => {
+  if (diff === null) return 'text-slate-400';
+  if (diff === 0)    return 'text-green-600';
+  if (diff > 0)      return 'text-blue-600';
+  return 'text-red-600';
+};
+
 const Cashout: React.FC = () => {
   const queryClient = useQueryClient();
   const { t } = useLanguage();
@@ -74,16 +88,19 @@ const Cashout: React.FC = () => {
     </div>
   );
 
-  // ── live computed values ──
-  const opening      = Number(form.openingCash || 0);
-  const actual       = parseFloat(form.actualCash);
-  const actualGpay   = parseFloat(form.actualGpay);
-  const cashSales    = Number(drawer?.cashSales || 0);
-  const gpaySales    = Number(drawer?.gpaySales || 0);
-  const expenses     = Number(drawer?.expenses || 0);
-  const expectedCash = opening + cashSales - expenses;
-  const cashDiff     = !isNaN(actual)     ? actual     - expectedCash : null;
-  const gpayDiff     = !isNaN(actualGpay) ? actualGpay - gpaySales   : null;
+  // ── live computed values (current drawer — not yet saved) ──────────────────
+  const opening    = Number(form.openingCash || 0);
+  const actual     = parseFloat(form.actualCash);
+  const actualGpay = parseFloat(form.actualGpay);
+  const cashSales  = Number(drawer?.cashSales || 0);
+  const gpaySales  = Number(drawer?.gpaySales || 0);
+
+  // New formula: Expected = Opening + Cash Sales + GPay Sales (no expenses)
+  const expectedTotal = opening + cashSales + gpaySales;
+  const actualCashAmt = !isNaN(actual)     ? actual     : 0;
+  const actualGpayAmt = !isNaN(actualGpay) ? actualGpay : 0;
+  const actualTotal   = actualCashAmt + actualGpayAmt;
+  const diff = form.actualCash !== '' ? actualTotal - expectedTotal : null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -126,38 +143,39 @@ const Cashout: React.FC = () => {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
 
-        {/* ── System figures (read-only) ── */}
+        {/* ── System Figures (read-only) ── */}
         <div className="bg-white rounded-lg shadow p-5 space-y-1">
           <h2 className="text-sm font-semibold text-slate-600 uppercase tracking-wide mb-3">
             {t('todaysSystemFigures')}
           </h2>
+
           <InfoRow label={t('openingCash')}  value={formatCurrency(opening)} />
           <InfoRow label={t('cashSales')}    value={`+${formatCurrency(cashSales)}`}  color="text-green-600" />
           <InfoRow label={t('gpayOnline')}   value={`+${formatCurrency(gpaySales)}`}  color="text-blue-600" />
-          <InfoRow label={t('expenses')}     value={`-${formatCurrency(expenses)}`}   color="text-red-600" />
+
           <InfoRow
-            label={t('expectedCash')}
-            value={formatCurrency(expectedCash)}
+            label={t('expectedTotal')}
+            value={formatCurrency(expectedTotal)}
             color="text-blue-700"
             bold
           />
 
-          {cashDiff !== null && (
+          {form.actualCash !== '' && (
             <InfoRow
-              label={t('cashDifference')}
-              value={`${cashDiff >= 0 ? '+' : ''}${formatCurrency(cashDiff)}`}
-              color={cashDiff >= 0 ? 'text-green-600' : 'text-red-600'}
+              label={t('actualTotal')}
+              value={formatCurrency(actualTotal)}
+              color="text-slate-700"
               bold
             />
           )}
 
-          {gpayDiff !== null && (
-            <InfoRow
-              label={t('gpayDifference')}
-              value={`${gpayDiff >= 0 ? '+' : ''}${formatCurrency(gpayDiff)}`}
-              color={gpayDiff >= 0 ? 'text-green-600' : 'text-red-600'}
-              bold
-            />
+          {diff !== null && (
+            <div className="flex items-center justify-between py-2 border-b border-slate-100 last:border-0">
+              <span className="text-sm text-slate-500">{t('statusLabel')}</span>
+              <span className={`text-sm font-bold ${statusColor(diff)}`}>
+                {statusLabel(diff)}
+              </span>
+            </div>
           )}
         </div>
 

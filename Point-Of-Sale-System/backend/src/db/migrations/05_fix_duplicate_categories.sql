@@ -55,12 +55,9 @@ WHERE id NOT IN (
 DO $$
 BEGIN
     IF NOT EXISTS (
-        SELECT 1
-        FROM pg_constraint c
-        JOIN pg_class t
-            ON c.conrelid = t.oid
-        WHERE c.conname = 'categories_name_en_unique'
-          AND t.relname = 'categories'
+        FROM pg_constraint
+        WHERE conname = 'categories_name_en_unique'
+          AND conrelid = 'categories'::regclass
     ) THEN
         ALTER TABLE categories
             ADD CONSTRAINT categories_name_en_unique

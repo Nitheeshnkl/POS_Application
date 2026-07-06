@@ -144,6 +144,13 @@ export const en = {
   "cashoutUpdated": "Cashout updated",
   "failedToUpdate": "Failed to update",
 
+  "expectedTotal": "Expected Total",
+  "actualTotal":   "Actual Total",
+  "balanced":      "Balanced",
+  "shortage":      "Shortage",
+  "excess":        "Excess",
+  "statusLabel":   "Status",
+
   "currentBill": "Current Bill",
   "cartEmpty": "Cart is empty",
   "addCustomer": "Add Customer",
