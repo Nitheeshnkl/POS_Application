@@ -7,16 +7,26 @@ import { Table } from '../../components/ui/Table';
 import { Button } from '../../components/ui/Button';
 import { Modal } from '../../components/ui/Modal';
 import { Input } from '../../components/ui/Input';
+import { Badge } from '../../components/ui/Badge';
 import { Plus, Trash2, Eye } from 'lucide-react';
-import { Purchase } from '../../types';
+import { Product, Purchase } from '../../types';
 import { formatCurrency } from '../../utils/formatCurrency';
 import { formatDate } from '../../utils/formatDate';
+
+interface PurchaseFormItem {
+  productId: string;
+  productNameEn: string;
+  qty: string;
+  purchasePrice: string;
+  total: number;
+}
 
 const Purchases: React.FC = () => {
   const queryClient = useQueryClient();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [selectedPurchase, setSelectedPurchase] = useState<Purchase | null>(null);
+  const [productOptions, setProductOptions] = useState<Record<number, Product[]>>({});
 
   const [formData, setFormData] = useState({
     supplierId: '',
@@ -24,7 +34,7 @@ const Purchases: React.FC = () => {
     supplierPhone: '',
     invoiceNumber: '',
     paymentMode: 'cash',
-    items: [] as any[],
+    items: [] as PurchaseFormItem[],
   });
 
   const { data: suppliers = [] } = useQuery({ queryKey: ['suppliers'], queryFn: getSuppliers });
@@ -40,6 +50,9 @@ const Purchases: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['purchases'] });
       handleCloseModal();
     },
+    onError: (error: any) => {
+      window.alert(error?.response?.data?.message || 'Unable to save purchase');
+    },
   });
 
   const handleOpenModal = () => {
@@ -51,6 +64,7 @@ const Purchases: React.FC = () => {
       paymentMode: 'cash',
       items: [{ productId: '', productNameEn: '', qty: '', purchasePrice: '', total: 0 }],
     });
+    setProductOptions({});
     setIsModalOpen(true);
   };
 
@@ -73,36 +87,46 @@ const Purchases: React.FC = () => {
 
   const handleItemChange = (index: number, field: string, value: any) => {
     const newItems = [...formData.items];
-    newItems[index][field] = value;
+    (newItems[index] as any)[field] = value;
+    if (field === 'productNameEn') {
+      newItems[index].productId = '';
+    }
     if (field === 'qty' || field === 'purchasePrice') {
       newItems[index].total = (Number(newItems[index].qty) || 0) * (Number(newItems[index].purchasePrice) || 0);
     }
     setFormData({ ...formData, items: newItems });
   };
 
-  const handleProductSelect = async (index: number, q: string) => {
-    if (q.length < 2) return;
-    const products = await searchProducts(q);
-    if (products && products.length > 0) {
-      const product = products[0];
-      const newItems = [...formData.items];
-      newItems[index].productId = product.id;
-      newItems[index].productNameEn = product.nameEn;
-      newItems[index].purchasePrice = product.purchasePrice.toString();
-      newItems[index].total = (Number(newItems[index].qty) || 0) * product.purchasePrice;
-      setFormData({ ...formData, items: newItems });
+  const handleProductSearch = async (index: number, q: string) => {
+    if (q.trim().length < 2) {
+      setProductOptions(prev => ({ ...prev, [index]: [] }));
+      return;
     }
+    const products = await searchProducts(q);
+    setProductOptions(prev => ({ ...prev, [index]: products || [] }));
+  };
+
+  const handleProductSelect = (index: number, product: Product) => {
+    const newItems = [...formData.items];
+    newItems[index].productId = product.id;
+    newItems[index].productNameEn = product.nameEn;
+    newItems[index].purchasePrice = String(product.purchasePrice ?? 0);
+    newItems[index].total = (Number(newItems[index].qty) || 0) * Number(product.purchasePrice ?? 0);
+    setFormData({ ...formData, items: newItems });
+    setProductOptions(prev => ({ ...prev, [index]: [] }));
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const mappedItems = formData.items.map(item => ({
-      product_id: item.productId,
+      product_id: item.productId || null,
+      product_name: item.productNameEn.trim(),
       quantity: Number(item.qty),
       unit_price: Number(item.purchasePrice),
     })) as any[];
     const totalAmount = mappedItems.reduce((sum: number, item: any) => sum + (item.quantity * item.unit_price), 0);
     createMutation.mutate({ 
+      supplierId: formData.supplierId,
       supplierName: formData.supplierName,
       supplierPhone: formData.supplierPhone,
       invoiceNumber: formData.invoiceNumber,
@@ -226,17 +250,39 @@ const Purchases: React.FC = () => {
             
             <div className="space-y-3">
               {formData.items.map((item, index) => (
-                <div key={index} className="grid grid-cols-12 gap-3 items-end">
+                <div key={index} className="grid grid-cols-12 gap-3 items-start">
                   <div className="col-span-4">
                     <Input
-                      placeholder="Search product..."
+                      placeholder="Search product or enter manual name"
                       value={item.productNameEn}
                       onChange={(e) => {
                         handleItemChange(index, 'productNameEn', e.target.value);
-                        handleProductSelect(index, e.target.value);
+                        void handleProductSearch(index, e.target.value);
                       }}
                       required
                     />
+                    <div className="mt-1">
+                      {item.productId ? (
+                        <Badge variant="success">Linked Product</Badge>
+                      ) : (
+                        <Badge variant="warning">Unlinked Product</Badge>
+                      )}
+                    </div>
+                    {(productOptions[index]?.length || 0) > 0 && (
+                      <div className="mt-2 max-h-36 overflow-auto rounded-md border border-slate-200 bg-white shadow-sm">
+                        {productOptions[index].map((product) => (
+                          <button
+                            key={product.id}
+                            type="button"
+                            className="block w-full px-3 py-2 text-left text-sm hover:bg-slate-50"
+                            onClick={() => handleProductSelect(index, product)}
+                          >
+                            <span className="font-medium">{product.nameEn}</span>
+                            <span className="ml-2 text-xs text-slate-500">{formatCurrency(product.purchasePrice)}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                   <div className="col-span-2">
                     <Input
@@ -313,6 +359,7 @@ const Purchases: React.FC = () => {
               <thead>
                 <tr>
                   <th className="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase">Product</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-slate-500 uppercase">Status</th>
                   <th className="px-4 py-2 text-right text-xs font-medium text-slate-500 uppercase">Qty</th>
                   <th className="px-4 py-2 text-right text-xs font-medium text-slate-500 uppercase">Price</th>
                   <th className="px-4 py-2 text-right text-xs font-medium text-slate-500 uppercase">Total</th>
@@ -321,7 +368,12 @@ const Purchases: React.FC = () => {
               <tbody className="divide-y divide-slate-200">
                 {selectedPurchase.items?.map((item: any, idx: number) => (
                   <tr key={idx}>
-                    <td className="px-4 py-2 text-sm">{item.nameEn || '—'}</td>
+                    <td className="px-4 py-2 text-sm">{item.nameEn || item.productName || '—'}</td>
+                    <td className="px-4 py-2 text-sm">
+                      <Badge variant={item.productId ? 'success' : 'warning'}>
+                        {item.itemStatus || (item.productId ? 'Linked Product' : 'Unlinked Product')}
+                      </Badge>
+                    </td>
                     <td className="px-4 py-2 text-sm text-right">{item.quantity}</td>
                     <td className="px-4 py-2 text-sm text-right">{formatCurrency(item.unitPrice)}</td>
                     <td className="px-4 py-2 text-sm text-right">{formatCurrency(item.totalPrice)}</td>
@@ -330,7 +382,7 @@ const Purchases: React.FC = () => {
               </tbody>
               <tfoot>
                 <tr className="font-bold">
-                  <td colSpan={3} className="px-4 py-2 text-right">Grand Total</td>
+                  <td colSpan={4} className="px-4 py-2 text-right">Grand Total</td>
                   <td className="px-4 py-2 text-right">{formatCurrency(selectedPurchase.totalAmount)}</td>
                 </tr>
               </tfoot>

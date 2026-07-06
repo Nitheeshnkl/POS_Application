@@ -71,6 +71,7 @@ CREATE TABLE IF NOT EXISTS purchase_items (
     id SERIAL PRIMARY KEY,
     purchase_id INTEGER REFERENCES purchases(id) ON DELETE CASCADE,
     product_id INTEGER REFERENCES products(id),
+    product_name VARCHAR(200),
     quantity DECIMAL(10, 3) NOT NULL,
     unit_price DECIMAL(10, 2) NOT NULL,
     total_price DECIMAL(12, 2) NOT NULL

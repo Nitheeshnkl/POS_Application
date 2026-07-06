@@ -38,7 +38,6 @@ export const getAllProducts = async (req: Request, res: Response, next: NextFunc
       LEFT JOIN categories c ON c.id = p.category_id
       WHERE ${where.length > 0 ? where.join(' AND ') : '1=1'}
       ORDER BY p.name_en
-      LIMIT 100
     `;
     const result = await pool.query(query, params);
     res.json(result.rows);

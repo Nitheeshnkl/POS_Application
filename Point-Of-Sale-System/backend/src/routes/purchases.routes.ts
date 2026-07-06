@@ -10,6 +10,7 @@ router.use(authenticate);
 router.get('/', purchasesController.getAllPurchases);
 router.post('/', roleGuard(['owner']), purchasesController.createPurchase);
 router.get('/summary', purchasesController.getPurchasesSummary);
+router.post('/items/:itemId/convert-to-product', roleGuard(['owner']), purchasesController.convertPurchaseItem);
 router.get('/:id', purchasesController.getPurchaseById);
 
 export default router;

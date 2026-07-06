@@ -81,11 +81,17 @@ export interface Bill {
 export interface PurchaseItem {
   id?: string;
   purchaseId?: string;
-  productId: string;
+  productId: string | null;
+  productName?: string;
   productNameEn: string;
+  nameEn?: string;
+  itemStatus?: 'Linked Product' | 'Unlinked Product';
   qty: number;
+  quantity?: number;
   purchasePrice: number;
+  unitPrice?: number;
   total: number;
+  totalPrice?: number;
 }
 
 export interface Purchase {

@@ -20,3 +20,8 @@ export const getPurchasesSummary = async () => {
   const response = await api.get('/purchases/summary');
   return response.data;
 };
+
+export const convertPurchaseItemToProduct = async (itemId: string, data: any) => {
+  const response = await api.post(`/purchases/items/${itemId}/convert-to-product`, data);
+  return response.data;
+};
