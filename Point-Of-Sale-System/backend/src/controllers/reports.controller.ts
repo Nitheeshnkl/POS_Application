@@ -280,3 +280,14 @@ export const getMonthlySales = async (req: Request, res: Response, next: NextFun
     next(error);
   }
 };
+
+import { DashboardService } from '../services/dashboard.service.js';
+
+export const getTargetMetrics = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const metrics = await DashboardService.getTargetMetrics();
+    res.json(metrics);
+  } catch (error) {
+    next(error);
+  }
+};

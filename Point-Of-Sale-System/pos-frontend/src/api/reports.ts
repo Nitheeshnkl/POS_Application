@@ -64,3 +64,8 @@ export const getMonthlySales = async (months: number = 12) => {
   const response = await api.get('/reports/monthly-sales', { params: { months } });
   return response.data;
 };
+
+export const getTargetMetrics = async () => {
+  const response = await api.get('/reports/targets');
+  return response.data;
+};

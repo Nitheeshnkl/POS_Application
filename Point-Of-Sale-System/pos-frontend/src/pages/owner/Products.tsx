@@ -31,6 +31,7 @@ const Products: React.FC = () => {
     sellingPrice: 0,
     minStockAlert: 5,
     initialStock: 0,
+    currentStock: 0,
   });
 
   const { data: products = [], isLoading } = useQuery({
@@ -56,7 +57,11 @@ const Products: React.FC = () => {
 
   const updateMutation = useMutation({
     mutationFn: (data: { id: string } & Partial<Product>) => updateProduct(data.id, data),
-    onSuccess: () => {
+    onSuccess: (updatedProduct) => {
+      queryClient.setQueryData(['products', searchTerm], (old: Product[] | undefined) => {
+        if (!old) return [];
+        return old.map(p => p.id === updatedProduct.id ? updatedProduct : p);
+      });
       queryClient.invalidateQueries({ queryKey: ['products'] });
       handleCloseModal();
     },
@@ -83,6 +88,7 @@ const Products: React.FC = () => {
       sellingPrice: Number(product.sellingPrice || 0),
       minStockAlert: Number(product.minStockAlert || 5),
       initialStock: 0,
+      currentStock: Number(product.currentStock || 0),
     });
   };
 
@@ -112,6 +118,7 @@ const Products: React.FC = () => {
         sellingPrice: 0,
         minStockAlert: 5,
         initialStock: 0,
+        currentStock: 0,
       });
       setIsModalOpen(true);
     }
@@ -154,14 +161,22 @@ const Products: React.FC = () => {
     { header: 'Unit', accessor: 'unitType' as const },
     {
       header: 'Stock',
-      accessor: (p: Product) => (
-        <div className="flex items-center space-x-2">
-          <span>{p.currentStock}</span>
-          {p.currentStock <= p.minStockAlert && (
-            <Badge variant="danger">Low</Badge>
-          )}
-        </div>
-      ),
+      accessor: (p: Product) => {
+        const stock = Number(p.currentStock || 0);
+        const minAlert = Number(p.minStockAlert || 5);
+        return (
+          <div className="flex items-center space-x-2">
+            <span className="font-medium text-slate-700">{stock} <span className="text-xs text-slate-400">{p.unitType}</span></span>
+            {stock <= 0 ? (
+              <Badge variant="danger">Out of Stock</Badge>
+            ) : stock <= minAlert ? (
+              <Badge variant="warning">Low Stock</Badge>
+            ) : (
+              <Badge variant="success">OK</Badge>
+            )}
+          </div>
+        );
+      },
     },
     {
       header: 'Purchase Price',
@@ -292,10 +307,22 @@ const Products: React.FC = () => {
           <Input
             label="Min Stock Alert"
             type="number"
+            step={['pcs', 'packet'].includes(formData.unitType) ? '1' : 'any'}
             value={formData.minStockAlert}
             onChange={(e) => setFormData({ ...formData, minStockAlert: Number(e.target.value) })}
             required
           />
+          {editingProduct && (
+            <Input
+              label="Available Stock"
+              type="number"
+              min="0"
+              step={['pcs', 'packet'].includes(formData.unitType) ? '1' : 'any'}
+              value={formData.currentStock}
+              onChange={(e) => setFormData({ ...formData, currentStock: Number(e.target.value) })}
+              required
+            />
+          )}
           <Input
             label="Purchase Price"
             type="number"
@@ -316,6 +343,8 @@ const Products: React.FC = () => {
             <Input
               label="Initial Stock"
               type="number"
+              min="0"
+              step={['pcs', 'packet'].includes(formData.unitType) ? '1' : 'any'}
               value={formData.initialStock}
               onChange={(e) => setFormData({ ...formData, initialStock: Number(e.target.value) })}
               required

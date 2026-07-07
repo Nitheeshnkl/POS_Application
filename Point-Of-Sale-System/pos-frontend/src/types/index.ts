@@ -147,6 +147,7 @@ export interface Settings {
   lowStockAlert: number;
   receiptFooter: string;
   billPrefix: string;
+  monthly_sales_target?: string;
 }
 
 export interface Supplier {

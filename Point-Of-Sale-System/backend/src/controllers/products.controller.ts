@@ -154,44 +154,68 @@ export const updateProduct = async (req: Request, res: Response, next: NextFunct
   const { id } = req.params;
   const { 
     category_id, name_en, name_ta, barcode, unit_type, 
-    purchase_price, selling_price, min_stock_alert, gst_rate, is_active 
+    purchase_price, selling_price, min_stock_alert, gst_rate, is_active,
+    current_stock 
   } = req.body;
   const normalized_barcode = normalizeBarcode(barcode);
 
+  const client = await pool.connect();
   try {
-    const existing = await pool.query('SELECT id FROM products WHERE id = $1', [id]);
+    await client.query('BEGIN');
+
+    const existing = await client.query('SELECT id, current_stock FROM products WHERE id = $1 FOR UPDATE', [id]);
     if (existing.rowCount === 0) {
+      await client.query('ROLLBACK');
       return res.status(404).json({ message: 'Product not found' });
     }
+    const previousStock = parseFloat(existing.rows[0].current_stock);
 
     if (normalized_barcode) {
-      const duplicate = await pool.query(
+      const duplicate = await client.query(
         'SELECT id FROM products WHERE barcode = $1 AND id <> $2 LIMIT 1',
         [normalized_barcode, id]
       );
       if (duplicate.rowCount && duplicate.rowCount > 0) {
+        await client.query('ROLLBACK');
         return res.status(400).json({ success: false, message: 'Another product already uses this barcode.' });
       }
     }
 
-    // Note: Only owner should update price edits according to details, 
-    // but the roleGuard will handle that in routes if we separate it.
-    // For now, let's just do a single update.
-    const result = await pool.query(
+    let nextStock = previousStock;
+    if (current_stock !== undefined) {
+      const parsedStock = parseFloat(current_stock);
+      if (isNaN(parsedStock) || parsedStock < 0) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ success: false, message: 'Stock must be a non-negative number.' });
+      }
+      nextStock = parsedStock;
+    }
+
+    const result = await client.query(
       `UPDATE products 
        SET category_id = $1, name_en = $2, name_ta = $3, barcode = $4, unit_type = $5, 
            purchase_price = $6, selling_price = $7, min_stock_alert = $8, gst_rate = $9, 
-           is_active = COALESCE($10, is_active), updated_at = CURRENT_TIMESTAMP
-       WHERE id = $11 RETURNING *`,
-      [category_id || null, name_en, name_ta, normalized_barcode, unit_type, purchase_price, selling_price, min_stock_alert, gst_rate, is_active, id]
+           is_active = COALESCE($10, is_active), current_stock = $11, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $12 RETURNING *`,
+      [category_id || null, name_en, name_ta, normalized_barcode, unit_type, purchase_price, selling_price, min_stock_alert, gst_rate, is_active, nextStock, id]
     );
 
-    if (result.rowCount === 0) {
-      return res.status(404).json({ message: 'Product not found' });
+    if (nextStock !== previousStock) {
+      await client.query(
+        `INSERT INTO stock_movements 
+         (product_id, type, quantity, previous_stock, new_stock, reason, performed_by) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [id, 'adjustment', Math.abs(nextStock - previousStock), previousStock, nextStock, 'Manual Stock Adjustment', req.user?.id]
+      );
     }
+
+    await client.query('COMMIT');
     res.json(result.rows[0]);
   } catch (error) {
+    await client.query('ROLLBACK');
     next(error);
+  } finally {
+    client.release();
   }
 };
 

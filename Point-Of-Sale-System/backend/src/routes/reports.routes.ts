@@ -18,5 +18,6 @@ router.get('/cashier-performance', reportsController.getCashierPerformance);
 router.get('/top-products', reportsController.getTopProducts);
 router.get('/daily-sales', reportsController.getDailySales);
 router.get('/monthly-sales', reportsController.getMonthlySales);
+router.get('/targets', reportsController.getTargetMetrics);
 
 export default router;

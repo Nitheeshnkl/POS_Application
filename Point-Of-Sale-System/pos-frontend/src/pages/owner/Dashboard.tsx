@@ -1,5 +1,5 @@
-import React from 'react';
-import { useQuery } from '@tanstack/react-query';
+import React, { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   BarChart,
   Bar,
@@ -15,15 +15,30 @@ import {
   Pie,
   Cell
 } from 'recharts';
-import { getDashboardData, getDailySales, getMonthlySales, getTopProducts } from '../../api/reports';
+import { getDashboardData, getDailySales, getMonthlySales, getTopProducts, getTargetMetrics } from '../../api/reports';
+import { updateSettings } from '../../api/settings';
 import { formatCurrency } from '../../utils/formatCurrency';
+import { Button } from '../../components/ui/Button';
+import { Input } from '../../components/ui/Input';
+import { Modal } from '../../components/ui/Modal';
+import { Badge } from '../../components/ui/Badge';
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8'];
 
 const Dashboard: React.FC = () => {
+  const queryClient = useQueryClient();
+
+  const [isTargetModalOpen, setIsTargetModalOpen] = useState(false);
+  const [newTarget, setNewTarget] = useState<string>('');
+
   const { data: metrics, isLoading: metricsLoading } = useQuery({
     queryKey: ['dashboard-metrics'],
     queryFn: getDashboardData
+  });
+
+  const { data: targetData, isLoading: targetLoading } = useQuery({
+    queryKey: ['target-metrics'],
+    queryFn: getTargetMetrics
   });
 
   const { data: dailySales } = useQuery({
@@ -41,7 +56,30 @@ const Dashboard: React.FC = () => {
     queryFn: () => getTopProducts({ limit: 10 })
   });
 
-  if (metricsLoading) return <div className="p-6">Loading dashboard...</div>;
+  const updateTargetMutation = useMutation({
+    mutationFn: (target: number) => updateSettings({ monthly_sales_target: target.toString() }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['target-metrics'] });
+      setIsTargetModalOpen(false);
+    }
+  });
+
+  const handleUpdateTarget = (e: React.FormEvent) => {
+    e.preventDefault();
+    const val = Number(newTarget);
+    if (val > 0) {
+      updateTargetMutation.mutate(val);
+    } else {
+      alert("Target must be a positive number.");
+    }
+  };
+
+  const openTargetModal = () => {
+    setNewTarget(targetData?.monthlyTarget?.toString() || '150000');
+    setIsTargetModalOpen(true);
+  };
+
+  if (metricsLoading || targetLoading) return <div className="p-6">Loading dashboard...</div>;
 
   const today = metrics?.today || {};
   const thisMonth = metrics?.thisMonth || {};
@@ -51,23 +89,128 @@ const Dashboard: React.FC = () => {
     total: Number(row.total),
   }));
 
-  return (
-    <div className="p-6">
-      <h1 className="text-2xl font-bold mb-6">Dashboard</h1>
+  const proj = targetData?.projection || {};
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <MetricCard title="Today's Sales" value={formatCurrency(today.sales || 0)} color="blue" />
-        <MetricCard title="Today's Bills" value={today.bills || 0} color="green" />
-        <MetricCard title="Today's Profit" value={formatCurrency(today.profit || 0)} color={today.profit >= 0 ? 'green' : 'red'} />
-        <MetricCard title="Monthly Sales" value={formatCurrency(thisMonth.sales || 0)} color="purple" />
+  return (
+    <div className="p-6 space-y-8">
+      <div className="flex justify-between items-center">
+        <h1 className="text-2xl font-bold">Dashboard</h1>
       </div>
 
-      <h2 className="text-xl font-bold mb-4">Investment vs Profit (This Month)</h2>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <MetricCard title="Purchases (Stock)" value={formatCurrency(thisMonth.purchases || 0)} color="orange" />
-        <MetricCard title="Other Expenses" value={formatCurrency(thisMonth.expenses || 0)} color="orange" />
-        <MetricCard title="Total Spent" value={formatCurrency((thisMonth.purchases || 0) + (thisMonth.expenses || 0))} color="red" />
-        <MetricCard title="Net Profit" value={formatCurrency(thisMonth.profit || 0)} color={(thisMonth.profit || 0) >= 0 ? 'green' : 'red'} />
+      {/* TARGET PROGRESS BAR */}
+      <div className="bg-white p-6 rounded-lg shadow border border-slate-200">
+        <div className="flex justify-between items-end mb-2">
+          <div>
+            <h2 className="text-sm font-semibold text-gray-500 uppercase">Monthly Sales Target</h2>
+            <div className="flex items-baseline space-x-2 mt-1">
+              <span className="text-3xl font-bold text-slate-800">{formatCurrency(targetData?.monthlyTarget || 0)}</span>
+              <Button variant="ghost" size="sm" onClick={openTargetModal} className="text-blue-600">
+                Edit Target
+              </Button>
+            </div>
+          </div>
+          <div className="text-right">
+            <div className="text-2xl font-bold text-blue-600">{Math.round(targetData?.progressPercentage || 0)}%</div>
+            <p className="text-sm text-gray-500">Progress</p>
+          </div>
+        </div>
+        <div className="w-full bg-gray-200 rounded-full h-4 mb-2 overflow-hidden">
+          <div 
+            className={`h-4 rounded-full transition-all duration-500 ${(targetData?.progressPercentage || 0) >= 100 ? 'bg-green-500' : 'bg-blue-600'}`}
+            style={{ width: `${Math.min(100, targetData?.progressPercentage || 0)}%` }}
+          ></div>
+        </div>
+        <div className="flex justify-between text-sm text-gray-500">
+          <span>{formatCurrency(targetData?.currentMonthSales || 0)} current</span>
+          <span>{formatCurrency(targetData?.remainingSales || 0)} remaining</span>
+        </div>
+      </div>
+
+      {/* KPI CARDS */}
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
+        <MetricCard title="Current Month Sales" value={formatCurrency(targetData?.currentMonthSales || 0)} color="purple" />
+        <MetricCard title="Remaining Sales" value={formatCurrency(targetData?.remainingSales || 0)} color="orange" />
+        <MetricCard title="Days Remaining" value={targetData?.daysRemaining} color="gray" />
+        <MetricCard title="Required Daily Sales" value={formatCurrency(targetData?.requiredDailySales || 0)} color="red" />
+        <MetricCard title="Target Status" value={targetData?.targetStatus} color={targetData?.targetStatus === 'Achieved' || targetData?.targetStatus === 'On Track' ? 'green' : 'red'} />
+        
+        <MetricCard title="Today's Sales" value={formatCurrency(targetData?.todaySales || 0)} color="blue" />
+        <MetricCard title="Today's Target" value={formatCurrency(targetData?.todayTarget || 0)} color="blue" />
+        <MetricCard title="Today's Profit" value={formatCurrency(today.profit || 0)} color={today.profit >= 0 ? 'green' : 'red'} />
+        <MetricCard title="Est. Month-End Sales" value={formatCurrency(targetData?.estimatedMonthEndSales || 0)} color="purple" />
+        <MetricCard title="Total Spent (Month)" value={formatCurrency((thisMonth.purchases || 0) + (thisMonth.expenses || 0))} color="orange" />
+      </div>
+
+      {/* PROJECTION & SMART DAILY TARGET */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div className="bg-white p-6 rounded-lg shadow">
+          <h2 className="text-lg font-semibold mb-4">Smart Daily Target</h2>
+          <div className="space-y-4">
+            <div className="flex justify-between border-b pb-2">
+              <span className="text-gray-600">Today's Target</span>
+              <span className="font-bold">{formatCurrency(proj.today?.target || 0)}</span>
+            </div>
+            <div className="flex justify-between border-b pb-2">
+              <span className="text-gray-600">Today's Actual Sales</span>
+              <span className="font-bold">{formatCurrency(proj.today?.actual || 0)}</span>
+            </div>
+            <div className="flex justify-between border-b pb-2">
+              <span className="text-gray-600">Today's Status</span>
+              <span className="font-bold">
+                {proj.today?.status === '✅' ? <span className="text-green-600">✅ Exceeded</span> : <span className="text-orange-500">In Progress</span>}
+              </span>
+            </div>
+            <div className="flex justify-between pt-2">
+              <span className="text-gray-600 font-semibold">Tomorrow's Req. Sales</span>
+              <span className="font-bold text-blue-600">{formatCurrency(proj.tomorrow?.target || 0)}</span>
+            </div>
+          </div>
+          <p className="text-xs text-gray-500 mt-4 italic">
+            Missed targets automatically increase remaining daily targets. Exceeded targets decrease them.
+          </p>
+        </div>
+
+        <div className="bg-white p-6 rounded-lg shadow">
+          <h2 className="text-lg font-semibold mb-4">Daily Projection Table</h2>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm text-left">
+              <thead className="bg-slate-50 text-slate-600 uppercase">
+                <tr>
+                  <th className="px-4 py-3 rounded-l-md">Day</th>
+                  <th className="px-4 py-3">Target</th>
+                  <th className="px-4 py-3">Actual</th>
+                  <th className="px-4 py-3 rounded-r-md">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                <tr className="hover:bg-slate-50 transition-colors">
+                  <td className="px-4 py-3 font-medium">Yesterday</td>
+                  <td className="px-4 py-3">{formatCurrency(proj.yesterday?.target || 0)}</td>
+                  <td className="px-4 py-3">{formatCurrency(proj.yesterday?.actual || 0)}</td>
+                  <td className="px-4 py-3">
+                    {proj.yesterday?.status === '✅' ? <Badge variant="success">✅ Achieved</Badge> : <Badge variant="danger">❌ Behind</Badge>}
+                  </td>
+                </tr>
+                <tr className="hover:bg-slate-50 transition-colors bg-blue-50/30">
+                  <td className="px-4 py-3 font-medium text-blue-700">Today</td>
+                  <td className="px-4 py-3 text-blue-700 font-medium">{formatCurrency(proj.today?.target || 0)}</td>
+                  <td className="px-4 py-3 text-blue-700 font-medium">{formatCurrency(proj.today?.actual || 0)}</td>
+                  <td className="px-4 py-3">
+                    {proj.today?.status === '✅' ? <Badge variant="success">✅ Achieved</Badge> : <Badge variant="warning">In Progress</Badge>}
+                  </td>
+                </tr>
+                <tr className="hover:bg-slate-50 transition-colors text-slate-400">
+                  <td className="px-4 py-3 font-medium">Tomorrow</td>
+                  <td className="px-4 py-3">{formatCurrency(proj.tomorrow?.target || 0)}</td>
+                  <td className="px-4 py-3">—</td>
+                  <td className="px-4 py-3">
+                    <Badge variant="gray">Upcoming</Badge>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
@@ -152,58 +295,50 @@ const Dashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* Top Selling Products Table */}
-      <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '8px', overflow: 'hidden', marginTop: '32px' }}>
-        <div style={{ padding: '16px 20px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h2 style={{ margin: 0, fontSize: '16px', fontWeight: 600, color: '#111827' }}>Top Selling Products</h2>
-          <span style={{ fontSize: '12px', color: '#6b7280' }}>Last 30 days</span>
-        </div>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
-          <thead style={{ background: '#f9fafb' }}>
-            <tr>
-              {['#', 'Product', 'Units Sold', 'Revenue', 'Stock'].map(h => (
-                <th key={h} style={{ padding: '10px 16px', textAlign: 'left', fontSize: '12px', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.03em' }}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {(topProducts || []).map((p: any, i: number) => (
-              <tr key={p.id} style={{ borderTop: '1px solid #f3f4f6' }}>
-                <td style={{ padding: '12px 16px', color: '#9ca3af', fontSize: '13px' }}>{i + 1}</td>
-                <td style={{ padding: '12px 16px' }}>
-                  <span style={{ fontWeight: 500, color: '#111827' }}>{p.nameEn}</span>
-                  {p.nameTa && <span style={{ fontSize: '12px', color: '#6b7280', marginLeft: '6px' }}>{p.nameTa}</span>}
-                </td>
-                <td style={{ padding: '12px 16px', color: '#111827' }}>{p.totalQtySold}</td>
-                <td style={{ padding: '12px 16px', color: '#111827' }}>₹{Number(p.totalRevenue).toFixed(2)}</td>
-                <td style={{ padding: '12px 16px' }}>
-                  <span style={{ padding: '3px 10px', borderRadius: '12px', fontSize: '12px', fontWeight: 500, background: p.needsRestock ? '#fef2f2' : '#f0fdf4', color: p.needsRestock ? '#b91c1c' : '#166534' }}>
-                    {p.currentStock} {p.needsRestock ? '⚠ Restock' : 'OK'}
-                  </span>
-                </td>
-              </tr>
-            ))}
-            {(topProducts || []).length === 0 && (
-              <tr><td colSpan={5} style={{ padding: '32px', textAlign: 'center', color: '#9ca3af' }}>No sales data yet</td></tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      {/* Target Edit Modal */}
+      <Modal
+        isOpen={isTargetModalOpen}
+        onClose={() => setIsTargetModalOpen(false)}
+        title="Set Monthly Sales Target"
+        size="sm"
+        footer={
+          <div className="flex justify-end space-x-3">
+            <Button variant="outline" onClick={() => setIsTargetModalOpen(false)}>Cancel</Button>
+            <Button onClick={handleUpdateTarget} isLoading={updateTargetMutation.isPending}>Save</Button>
+          </div>
+        }
+      >
+        <form onSubmit={handleUpdateTarget} className="space-y-4">
+          <Input
+            label="Monthly Target (₹)"
+            type="number"
+            min="1"
+            value={newTarget}
+            onChange={(e) => setNewTarget(e.target.value)}
+            required
+          />
+          <p className="text-sm text-gray-500">
+            This target resets every month. Dashboards and daily projections will adjust automatically based on this goal.
+          </p>
+        </form>
+      </Modal>
     </div>
   );
 };
 
 const colorMap: Record<string, string> = {
-  blue: 'border-blue-500',
-  green: 'border-green-500',
-  red: 'border-red-500',
-  purple: 'border-purple-500',
+  blue: 'border-blue-500 text-blue-600',
+  green: 'border-green-500 text-green-600',
+  red: 'border-red-500 text-red-600',
+  purple: 'border-purple-500 text-purple-600',
+  orange: 'border-orange-500 text-orange-600',
+  gray: 'border-gray-500 text-gray-600',
 };
 
 const MetricCard = React.memo(({ title, value, color = 'blue' }: { title: string; value: string | number; color?: string }) => (
-  <div className={`bg-white p-6 rounded-lg shadow border-l-4 ${colorMap[color] || 'border-blue-500'}`}>
-    <h3 className="text-sm font-medium text-gray-500 uppercase tracking-wider">{title}</h3>
-    <p className="mt-2 text-3xl font-bold text-gray-900">{value}</p>
+  <div className={`bg-white p-5 rounded-lg shadow border-t-4 ${colorMap[color].split(' ')[0]}`}>
+    <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 line-clamp-1">{title}</h3>
+    <p className={`text-xl font-bold ${colorMap[color].split(' ')[1]}`}>{value}</p>
   </div>
 ));
 
