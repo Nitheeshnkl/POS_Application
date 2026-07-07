@@ -1,1 +1,0 @@
-- [POS backend missing bootstrap files](pos-backend-bootstrap.md) — Node backend in Point-Of-Sale-System/backend was missing src/index.ts, config/db.ts, config/env.ts, and cashout.controller.ts; had to be reconstructed from route/controller imports and migration schema.
