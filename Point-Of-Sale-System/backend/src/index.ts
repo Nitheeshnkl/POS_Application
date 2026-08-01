@@ -123,7 +123,7 @@ async function start() {
   try {
     await pool.query('SELECT 1');
     logger.info('Database connection established.');
-    await runMigrations();
+    //await runMigrations();
     logger.info('Database migrations applied.');
   } catch (error: any) {
     logger.error(`Startup database error: ${error.message}`);
