@@ -39,7 +39,6 @@ const pool = env.DATABASE_URL
   ? new Pool({
       connectionString: env.DATABASE_URL,
       ssl: shouldUseSsl ? { rejectUnauthorized: false } : undefined,
-      options: '-c search_path=public',
     })
   : new Pool({
       host: env.PGHOST,
@@ -48,7 +47,6 @@ const pool = env.DATABASE_URL
       user: env.PGUSER,
       password: env.PGPASSWORD,
       ssl: shouldUseSsl ? { rejectUnauthorized: false } : undefined,
-      options: '-c search_path=public',
     });
 
 pool.on('error', (err) => {
@@ -59,6 +57,9 @@ const __dirname = path.dirname(__filename);
 
 export async function runMigrations() {
   const migrationsDir = path.join(__dirname, '..', 'db', 'migrations');
+
+  await pool.query('SET search_path TO public');
+
   const files = fs
     .readdirSync(migrationsDir)
     .filter((file) => file.endsWith('.sql'))
