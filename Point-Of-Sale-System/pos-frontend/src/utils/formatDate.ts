@@ -27,3 +27,11 @@ export const formatDateOnly = (date: string | Date | null | undefined): string =
     year: 'numeric',
   }).format(d);
 };
+
+/** Reusable business date helper using India timezone with a 10-hour offset for next morning cashouts */
+export const getTodayInAsiaKolkata = (): string => {
+  const localTimeStr = new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' });
+  const dateInKolkata = new Date(localTimeStr);
+  const businessDate = new Date(dateInKolkata.getTime() - 10 * 60 * 60 * 1000);
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(businessDate);
+};

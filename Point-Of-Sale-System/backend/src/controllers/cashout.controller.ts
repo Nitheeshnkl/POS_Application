@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import pool from '../config/db.js';
+import { getTodayInAsiaKolkata } from '../utils/date.js';
 
 // ── computeDailyTotals ────────────────────────────────────────────────────────
 // Queries live bills + expenses tables for the given date.
@@ -110,7 +111,7 @@ function buildHistoryRecord(row: any) {
 // Live calculation from today's bills. Uses buildCurrentRecord.
 export const getCurrentDrawer = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = getTodayInAsiaKolkata();
     const { rows } = await pool.query(
       `SELECT c.*, u.name AS opened_by_name
        FROM cashouts c
@@ -144,7 +145,7 @@ export const getCurrentDrawer = async (req: Request, res: Response, next: NextFu
 export const saveCashout = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { opening_cash = 0, actual_cash, actual_gpay = null, notes = '', date } = req.body;
-    const cashout_date = date || new Date().toISOString().slice(0, 10);
+    const cashout_date = date || getTodayInAsiaKolkata();
     const opened_by = req.user?.id;
 
     const totals = await computeDailyTotals(cashout_date);
@@ -156,24 +157,70 @@ export const saveCashout = async (req: Request, res: Response, next: NextFunctio
       ? actual_total - expected_total
       : 0;
 
-    const { rows } = await pool.query(
-      `INSERT INTO cashouts
-         (opened_by, cashout_date, opening_cash, expected_total, actual_cash, actual_gpay, difference, notes)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-       ON CONFLICT (cashout_date)
-       DO UPDATE SET
-         opening_cash   = EXCLUDED.opening_cash,
-         expected_total = EXCLUDED.expected_total,
-         actual_cash    = EXCLUDED.actual_cash,
-         actual_gpay    = EXCLUDED.actual_gpay,
-         difference     = EXCLUDED.difference,
-         notes          = EXCLUDED.notes,
-         updated_at     = CURRENT_TIMESTAMP
-       RETURNING *`,
-      [opened_by, cashout_date, opening_cash, expected_total, actual_cash, actual_gpay, difference, notes]
+    // Check if cashout already exists
+    const existing = await pool.query(
+      `SELECT * FROM cashouts WHERE cashout_date = $1`,
+      [cashout_date]
     );
 
-    res.status(201).json({ success: true, data: buildCurrentRecord(rows[0], totals) });
+    if (existing.rows.length > 0 && existing.rows[0].actual_cash !== null) {
+      return res.status(400).json({
+        success: false,
+        message: 'Cashout record already exists and is completed for this date.'
+      });
+    }
+
+    // Add temporary debugging logs before creation/update
+    console.log('[DEBUG] Preparing to save cashout:', {
+      cashout_date,
+      actual_cash,
+      actual_gpay,
+      expected_total,
+      user_id: opened_by
+    });
+
+    let savedRow;
+    if (existing.rows.length > 0) {
+      // Update existing uncompleted cashout
+      const { rows } = await pool.query(
+        `UPDATE cashouts
+         SET
+           opening_cash   = $1,
+           expected_total = $2,
+           actual_cash    = $3,
+           actual_gpay    = $4,
+           difference     = $5,
+           notes          = $6,
+           updated_at     = CURRENT_TIMESTAMP
+         WHERE cashout_date = $7
+         RETURNING *`,
+        [opening_cash, expected_total, actual_cash, actual_gpay, difference, notes, cashout_date]
+      );
+      savedRow = rows[0];
+      console.log('[DEBUG] Cashout record updated successfully. ID:', savedRow.id);
+    } else {
+      // Create new cashout
+      const { rows } = await pool.query(
+        `INSERT INTO cashouts
+           (opened_by, cashout_date, opening_cash, expected_total, actual_cash, actual_gpay, difference, notes)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+         ON CONFLICT (cashout_date) DO NOTHING
+         RETURNING *`,
+        [opened_by, cashout_date, opening_cash, expected_total, actual_cash, actual_gpay, difference, notes]
+      );
+      
+      if (rows.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Cashout record already exists for this date.'
+        });
+      }
+      
+      savedRow = rows[0];
+      console.log('[DEBUG] Cashout record created successfully. ID:', savedRow.id);
+    }
+
+    res.status(201).json({ success: true, data: buildCurrentRecord(savedRow, totals) });
   } catch (error) {
     next(error);
   }

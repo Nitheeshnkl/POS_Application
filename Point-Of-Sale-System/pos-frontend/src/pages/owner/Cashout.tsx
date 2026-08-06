@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getCurrentDrawer, saveCashout } from '../../api/cashouts';
+import { getCurrentDrawer, saveCashout, editCashout } from '../../api/cashouts';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { formatCurrency } from '../../utils/formatCurrency';
-import { formatDateOnly } from '../../utils/formatDate';
+import { formatDateOnly, getTodayInAsiaKolkata } from '../../utils/formatDate';
 import { useLanguage } from '../../i18n/LanguageContext';
 import toast from 'react-hot-toast';
 
@@ -35,7 +35,7 @@ const statusColor = (diff: number | null): string => {
 const Cashout: React.FC = () => {
   const queryClient = useQueryClient();
   const { t } = useLanguage();
-  const today = new Date().toISOString().split('T')[0];
+  const today = getTodayInAsiaKolkata();
 
   const { data: drawer, isLoading, isError, refetch } = useQuery({
     queryKey: ['cashout'],
@@ -71,6 +71,17 @@ const Cashout: React.FC = () => {
 
   const saveMutation = useMutation({
     mutationFn: saveCashout,
+    onError:   (err: any) => toast.error(err?.response?.data?.message || err.message || t('failedToSave')),
+    onSuccess: async () => { toast.success(t('cashSavedSuccessfully')); await invalidateAll(); },
+  });
+
+  const editMutation = useMutation({
+    mutationFn: (payload: { id: number; actual_cash: number; actual_gpay: number | null; notes: string }) =>
+      editCashout(payload.id, {
+        actual_cash: payload.actual_cash,
+        actual_gpay: payload.actual_gpay !== null ? payload.actual_gpay : undefined,
+        notes: payload.notes
+      }),
     onError:   (err: any) => toast.error(err?.response?.data?.message || err.message || t('failedToSave')),
     onSuccess: async () => { toast.success(t('cashSavedSuccessfully')); await invalidateAll(); },
   });
@@ -115,13 +126,22 @@ const Cashout: React.FC = () => {
       return;
     }
     try {
-      await saveMutation.mutateAsync({
-        opening_cash: opening,
-        actual_cash:  actualVal,
-        actual_gpay:  actualGpayVal,
-        notes:        form.notes,
-        date:         today,
-      });
+      if (drawer?.id) {
+        await editMutation.mutateAsync({
+          id: drawer.id,
+          actual_cash:  actualVal,
+          actual_gpay:  actualGpayVal,
+          notes:        form.notes,
+        });
+      } else {
+        await saveMutation.mutateAsync({
+          opening_cash: opening,
+          actual_cash:  actualVal,
+          actual_gpay:  actualGpayVal,
+          notes:        form.notes,
+          date:         today,
+        });
+      }
     } catch (e) {
       // Errors handled by onError callback
     }
@@ -224,7 +244,7 @@ const Cashout: React.FC = () => {
               />
             </div>
 
-            <Button type="submit" className="w-full" isLoading={saveMutation.isPending}>
+            <Button type="submit" className="w-full" isLoading={saveMutation.isPending || editMutation.isPending}>
               {drawer?.id ? t('updateTodaysCash') : t('saveTodaysCash')}
             </Button>
           </form>
